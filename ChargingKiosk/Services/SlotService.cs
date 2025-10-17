@@ -122,6 +122,9 @@ public class SlotService : ISlotService
             return false;
         }
 
+        // Store fingerprint ID before clearing it
+        int? fingerprintIdToDelete = slot.FingerprintId;
+
         slot.EndTime = DateTime.Now;
         slot.Status = SlotStatus.Available;
         slot.FingerprintId = null;
@@ -129,10 +132,32 @@ public class SlotService : ISlotService
         // Turn off relay
         await ControlRelayAsync(slotNumber, false);
         
-        // Unlock the slot
+        // Unlock the slot and delete fingerprint for secured slots
         if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
             await LockSlotAsync(slotNumber, false);
+            
+            // Delete fingerprint from AS608 sensor to free up memory
+            if (fingerprintIdToDelete.HasValue)
+            {
+                try
+                {
+                    var deleted = await _arduinoService.DeleteFingerprintAsync(fingerprintIdToDelete.Value);
+                    if (deleted)
+                    {
+                        _logger.LogInformation($"Fingerprint {fingerprintIdToDelete.Value} deleted from sensor for slot {slotNumber}");
+                    }
+                    else
+                    {
+                        _logger.LogWarning($"Failed to delete fingerprint {fingerprintIdToDelete.Value} from sensor");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError(ex, $"Error deleting fingerprint {fingerprintIdToDelete.Value} from sensor");
+                    // Continue even if deletion fails - session still ends
+                }
+            }
         }
         
         return true;

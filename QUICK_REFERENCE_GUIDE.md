@@ -401,7 +401,69 @@ Problem?
 
 ---
 
+---
+
+## 🔧 Hardware Configuration Made Easy
+
+**NEW**: You can now easily configure relay/solenoid/UV light behavior!
+
+### If Hardware Works Backwards
+
+**Problem**: Relay/solenoid/UV light does opposite of what you expect?
+
+**Solution**: Edit lines 30-45 in `arduino_sketch.ino`
+
+**Quick Fix**:
+```cpp
+// If relays work backwards:
+const int RELAY_ON = LOW;       // Swap HIGH to LOW
+const int RELAY_OFF = HIGH;     // Swap LOW to HIGH
+
+// If solenoids work backwards:
+const int SOLENOID_LOCKED = LOW;     // Swap HIGH to LOW
+const int SOLENOID_UNLOCKED = HIGH;  // Swap LOW to HIGH
+
+// If UV lights work backwards:
+const int UV_LIGHT_ON = LOW;    // Swap HIGH to LOW
+const int UV_LIGHT_OFF = HIGH;  // Swap LOW to HIGH
+```
+
+**Steps**:
+1. Open `arduino_sketch.ino`
+2. Find lines 30-45 (Hardware Configuration section)
+3. Swap HIGH and LOW for the component that's backwards
+4. Upload to Arduino
+5. Test again!
+
+**Complete Guide**: See `HARDWARE_CONFIG_GUIDE.md` for detailed testing procedures.
+
+---
+
+## 🆕 New Feature: Automatic Fingerprint Cleanup
+
+**What**: Fingerprints are automatically deleted from the AS608 sensor after each session ends.
+
+**Why**:
+- 🔒 **Privacy**: Your biometric data doesn't remain on the system
+- 💾 **Memory**: Frees sensor memory for unlimited sessions
+- 🔐 **Security**: Old fingerprints can't be reused
+
+**When It Happens**:
+- ✅ When you end your charging session
+- ✅ When charging time expires
+- ❌ NOT during "Access Device" (temporary unlock)
+
+**For Users**: Nothing changes! It happens automatically behind the scenes.
+
+**For Operators**: Check logs for "Fingerprint X deleted from sensor" messages.
+
+---
+
 **Last Updated**: October 17, 2025  
-**Version**: 2.0  
+**Version**: 2.2 (Added Hardware Configuration)  
 **For Support**: Check SYSTEM_IMPROVEMENTS.md for detailed documentation
+
+### New Documentation Files
+- **HARDWARE_CONFIG_GUIDE.md** - How to configure relays/solenoids/UV lights
+- **FINGERPRINT_DELETION_FEATURE.md** - Automatic fingerprint cleanup details
 

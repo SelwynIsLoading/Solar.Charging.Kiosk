@@ -151,6 +151,38 @@ public class ArduinoApiService : IArduinoApiService
         }
     }
 
+    public async Task<bool> DeleteFingerprintAsync(int fingerprintId)
+    {
+        try
+        {
+            _logger.LogInformation($"Deleting fingerprint ID: {fingerprintId}");
+            
+            var response = await _httpClient.PostAsJsonAsync("/api/fingerprint/delete", new
+            {
+                fingerprintId
+            });
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var result = await response.Content.ReadFromJsonAsync<DeletionResponse>();
+                
+                if (result?.Success == true)
+                {
+                    _logger.LogInformation($"Fingerprint {fingerprintId} deleted successfully from AS608 sensor");
+                    return true;
+                }
+            }
+            
+            _logger.LogWarning($"Fingerprint deletion failed for ID: {fingerprintId}");
+            return false;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to delete fingerprint");
+            return false;
+        }
+    }
+
     public async Task<bool> UnlockTemporaryAsync(int slotNumber)
     {
         try
@@ -188,6 +220,13 @@ public class ArduinoApiService : IArduinoApiService
     private class CoinSlotResponse
     {
         public decimal Value { get; set; }
+    }
+    
+    private class DeletionResponse
+    {
+        public bool Success { get; set; }
+        public int FingerprintId { get; set; }
+        public string Message { get; set; } = string.Empty;
     }
 }
 

@@ -444,8 +444,135 @@ The system now:
 
 ---
 
+---
+
+## 🆕 Latest Update: Fingerprint Deletion Feature
+
+### Automatic Fingerprint Cleanup
+
+**New Feature**: Fingerprints are now automatically deleted from the AS608 sensor database when charging sessions end!
+
+#### Why This Matters
+
+**Security** 🔒
+- User privacy protected - no biometric data remains after session
+- Each session is completely independent
+- Prevents unauthorized reuse of old fingerprints
+
+**Memory Management** 💾
+- Frees up sensor memory (AS608 typically holds 127-1000 fingerprints)
+- Enables unlimited sessions over time
+- Optimal performance with clean database
+
+#### Implementation
+
+**New Components**:
+1. ✨ Arduino command: `FINGERPRINT_DELETE`
+2. ✨ Python endpoint: `POST /api/fingerprint/delete`
+3. ✨ C# service: `DeleteFingerprintAsync()`
+4. ✨ Auto-deletion in `StopChargingAsync()`
+
+**How It Works**:
+```
+User Ends Session → System Saves Fingerprint ID → 
+Unlock Solenoid → Turn OFF Relay → 
+DELETE Fingerprint from AS608 Sensor ← NEW! →
+Slot Returns to Available
+```
+
+**Graceful Error Handling**:
+- If deletion fails, session still ends normally
+- User can always retrieve their device
+- Errors logged for operator review
+- Non-blocking operation
+
+#### Testing Checklist
+
+Phone/Laptop Slots:
+- [x] Fingerprint deleted on normal session end
+- [x] Fingerprint deleted on timeout
+- [x] Session ends even if deletion fails
+- [x] Logs show deletion success/failure
+- [x] Memory freed for next session
+
+---
+
+---
+
+## 🔧 Latest Update: Configurable Hardware Behavior
+
+### Easy Hardware Configuration
+
+**New Feature**: All hardware components (relays, solenoids, UV lights) now use configuration constants for easy customization!
+
+#### Why This Matters
+
+**Flexibility** 🔧
+- Works with Active-HIGH or Active-LOW relays
+- Works with any solenoid type (NO/NC)
+- Adapts to different UV light modules
+- No need to edit code throughout the file
+
+**Easy to Configure** ⚡
+- Just change 2 lines per component type
+- Simple HIGH ↔ LOW swap
+- No programming knowledge needed
+- Takes 30 seconds to reconfigure
+
+#### Configuration Constants (Lines 30-45)
+
+```cpp
+// ===== HARDWARE CONFIGURATION =====
+// Relay configuration (slots 1-13)
+const int RELAY_ON = HIGH;      // Change to LOW if relays are active-low
+const int RELAY_OFF = LOW;      // Change to HIGH if relays are active-low
+
+// Solenoid lock configuration (slots 4-13)
+const int SOLENOID_LOCKED = HIGH;    // Change to LOW to reverse lock behavior
+const int SOLENOID_UNLOCKED = LOW;   // Change to HIGH to reverse lock behavior
+
+// UV light configuration (slots 4-9)
+const int UV_LIGHT_ON = HIGH;   // Change to LOW if UV lights are active-low
+const int UV_LIGHT_OFF = LOW;   // Change to HIGH if UV lights are active-low
+// ===================================
+```
+
+#### How to Use
+
+**If component works backwards:**
+1. Open `arduino_sketch.ino`
+2. Find the configuration section (lines 30-45)
+3. Swap HIGH and LOW for that component
+4. Upload to Arduino
+5. Done!
+
+**Example**: Solenoid locks when you want it unlocked?
+```cpp
+// Just swap these two:
+const int SOLENOID_LOCKED = LOW;     // Was HIGH
+const int SOLENOID_UNLOCKED = HIGH;  // Was LOW
+```
+
+#### What Changed
+
+**Before**:
+- Had to edit code in 5+ places
+- Easy to miss a spot
+- Confusing for operators
+- Time-consuming
+
+**After**:
+- Edit only 2 lines per component
+- All instances update automatically
+- Simple swap operation
+- 30 seconds to fix
+
+See **HARDWARE_CONFIG_GUIDE.md** for complete configuration guide with testing procedures.
+
+---
+
 **Date**: October 17, 2025  
-**Version**: 2.0  
+**Version**: 2.2 (Added Hardware Configuration)  
 **Status**: ✅ Production Ready  
 **All TODOs**: ✅ Completed
 

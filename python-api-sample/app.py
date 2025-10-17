@@ -274,6 +274,38 @@ def unlock_temp():
     
     return jsonify(result), 200 if result.get('success') else 500
 
+@app.route('/api/fingerprint/delete', methods=['POST'])
+def delete_fingerprint():
+    """
+    Delete fingerprint from AS608 sensor
+    Called when charging session ends to free up sensor memory
+    """
+    data = request.json
+    fingerprint_id = data.get('fingerprintId')
+    
+    print(f"\n=== Deleting Fingerprint ===")
+    print(f"Fingerprint ID: {fingerprint_id}")
+    
+    result = send_arduino_command('FINGERPRINT_DELETE', {
+        'fingerprintId': fingerprint_id
+    })
+    
+    if result.get('success'):
+        print(f"✓ Fingerprint {fingerprint_id} deleted successfully!")
+        print(f"=== Deletion Complete ===\n")
+        return jsonify({
+            'success': True,
+            'fingerprintId': fingerprint_id,
+            'message': 'Fingerprint deleted successfully'
+        }), 200
+    else:
+        print(f"✗ Deletion failed: {result.get('message', 'Unknown error')}")
+        print(f"=== Deletion Failed ===\n")
+        return jsonify({
+            'success': False,
+            'error': result.get('message', 'Deletion failed')
+        }), 500
+
 @app.route('/api/fingerprint/enroll', methods=['POST'])
 def enroll_fingerprint():
     """

@@ -27,6 +27,23 @@ const int UV_LIGHT_PINS[] = {45, 46, 47, 48, 49, 50};
 // Coin acceptor pin
 const int COIN_PIN = 2;
 
+// ===== HARDWARE CONFIGURATION =====
+// Change these values based on your specific hardware setup
+// If your relays/solenoids/UV lights work backwards, just swap HIGH and LOW
+
+// Relay configuration (slots 1-13)
+const int RELAY_ON = HIGH;      // Change to LOW if your relays are active-low
+const int RELAY_OFF = LOW;      // Change to HIGH if your relays are active-low
+
+// Solenoid lock configuration (slots 4-13)
+const int SOLENOID_LOCKED = HIGH;    // Change to LOW if your solenoids lock with LOW signal
+const int SOLENOID_UNLOCKED = LOW;   // Change to HIGH if your solenoids unlock with HIGH signal
+
+// UV light configuration (slots 4-9)
+const int UV_LIGHT_ON = HIGH;   // Change to LOW if your UV lights turn on with LOW signal
+const int UV_LIGHT_OFF = LOW;   // Change to HIGH if your UV lights turn off with HIGH signal
+// ===================================
+
 volatile int coinPulseCount = 0;
 float coinValue = 0.0;
 unsigned long coinDetectedTime = 0;
@@ -37,24 +54,24 @@ void setup() {
   Serial.begin(9600);
   
   // Initialize relay pins
-  // ACTIVE HIGH (HIGH = ON, LOW = OFF)
+  // Use configuration constants for relay behavior
   for (int i = 0; i < 13; i++) {
     pinMode(RELAY_PINS[i], OUTPUT);
-    digitalWrite(RELAY_PINS[i], LOW);  // LOW = OFF (default state)
+    digitalWrite(RELAY_PINS[i], RELAY_OFF);  // Default state: OFF
   }
   
   // Initialize solenoid pins
-  // HIGH = locked, LOW = unlocked
+  // Use configuration constants for lock behavior
   for (int i = 0; i < 10; i++) {
     pinMode(SOLENOID_PINS[i], OUTPUT);
-    digitalWrite(SOLENOID_PINS[i], HIGH);  // HIGH = locked (default state)
+    digitalWrite(SOLENOID_PINS[i], SOLENOID_LOCKED);  // Default state: locked
   }
   
   // Initialize UV light pins
-  // HIGH = ON, LOW = OFF
+  // Use configuration constants for UV light behavior
   for (int i = 0; i < 6; i++) {
     pinMode(UV_LIGHT_PINS[i], OUTPUT);
-    digitalWrite(UV_LIGHT_PINS[i], LOW);  // LOW = OFF (default state)
+    digitalWrite(UV_LIGHT_PINS[i], UV_LIGHT_OFF);  // Default state: OFF
   }
   
   // Initialize coin acceptor
@@ -122,6 +139,8 @@ void processCommand(String jsonString) {
     handleReadCoin();
   } else if (command == "UNLOCK_TEMP") {
     handleUnlockTemp(data);
+  } else if (command == "FINGERPRINT_DELETE") {
+    handleFingerprintDelete(data);
   } else {
     sendResponse(false, "Unknown command");
   }
@@ -132,8 +151,8 @@ void handleRelay(JsonObject data) {
   bool state = data["state"];
   
   if (slot >= 1 && slot <= 13) {
-    // ACTIVE HIGH: HIGH = ON, LOW = OFF
-    digitalWrite(RELAY_PINS[slot - 1], state ? HIGH : LOW);
+    // Use configuration constants for relay behavior
+    digitalWrite(RELAY_PINS[slot - 1], state ? RELAY_ON : RELAY_OFF);
     sendResponse(true, "Relay controlled");
   } else {
     sendResponse(false, "Invalid slot number");
@@ -146,8 +165,8 @@ void handleSolenoid(JsonObject data) {
   
   // Solenoids are for slots 4-13 (index 0-9)
   if (slot >= 4 && slot <= 13) {
-    // HIGH = locked, LOW = unlocked
-    digitalWrite(SOLENOID_PINS[slot - 4], lock ? HIGH : LOW);
+    // Use configuration constants for lock/unlock behavior
+    digitalWrite(SOLENOID_PINS[slot - 4], lock ? SOLENOID_LOCKED : SOLENOID_UNLOCKED);
     sendResponse(true, "Solenoid controlled");
   } else {
     sendResponse(false, "Invalid slot number for solenoid");
@@ -160,7 +179,8 @@ void handleUVLight(JsonObject data) {
   
   // UV lights are for slots 4-9 (index 0-5)
   if (slot >= 4 && slot <= 9) {
-    digitalWrite(UV_LIGHT_PINS[slot - 4], state ? HIGH : LOW);
+    // Use configuration constants for UV light behavior
+    digitalWrite(UV_LIGHT_PINS[slot - 4], state ? UV_LIGHT_ON : UV_LIGHT_OFF);
     sendResponse(true, "UV light controlled");
   } else {
     sendResponse(false, "Invalid slot number for UV light");
@@ -458,13 +478,38 @@ void handleUnlockTemp(JsonObject data) {
   
   // Temporary unlock for slots 4-13 (pulse for 2 seconds to unlock)
   if (slot >= 4 && slot <= 13) {
-    // Send LOW pulse for 2 seconds to unlock (normally HIGH = locked)
-    digitalWrite(SOLENOID_PINS[slot - 4], LOW);
+    // Send unlock signal for 2 seconds using configuration constants
+    digitalWrite(SOLENOID_PINS[slot - 4], SOLENOID_UNLOCKED);
     delay(2000);  // Hold unlock for 2 seconds
-    digitalWrite(SOLENOID_PINS[slot - 4], HIGH); // Re-lock
+    digitalWrite(SOLENOID_PINS[slot - 4], SOLENOID_LOCKED); // Re-lock
     sendResponse(true, "Temporary unlock completed");
   } else {
     sendResponse(false, "Invalid slot number for solenoid");
+  }
+}
+
+void handleFingerprintDelete(JsonObject data) {
+  int fingerprintId = data["fingerprintId"];
+  
+  Serial.println("{\"status\":\"Deleting fingerprint from AS608 sensor...\"}");
+  
+  // Delete fingerprint from AS608 sensor memory
+  uint8_t p = finger.deleteModel(fingerprintId);
+  
+  if (p == FINGERPRINT_OK) {
+    // Success!
+    StaticJsonDocument<100> doc;
+    doc["success"] = true;
+    doc["message"] = "Fingerprint deleted successfully";
+    doc["fingerprintId"] = fingerprintId;
+    
+    String response;
+    serializeJson(doc, response);
+    Serial.println(response);
+  } else if (p == FINGERPRINT_DELETEFAIL) {
+    sendResponse(false, "Failed to delete fingerprint");
+  } else {
+    sendResponse(false, "Error deleting fingerprint from sensor");
   }
 }
 

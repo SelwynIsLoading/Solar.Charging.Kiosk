@@ -383,7 +383,180 @@ For issues or questions:
 
 ---
 
+---
+
+## 🆕 Latest Feature: Automatic Fingerprint Deletion
+
+### Overview
+Fingerprints are now automatically deleted from the AS608 sensor database after each charging session ends. This ensures user privacy and optimal sensor memory management.
+
+### Benefits
+
+**Security & Privacy**:
+- ✅ No biometric data remains after session
+- ✅ Each session is completely independent
+- ✅ Prevents unauthorized fingerprint reuse
+- ✅ Complies with privacy best practices
+
+**Memory Management**:
+- ✅ Frees sensor memory for next user
+- ✅ Enables unlimited sessions over time
+- ✅ Prevents sensor memory exhaustion
+- ✅ Maintains optimal performance
+
+### Implementation Details
+
+**Arduino Command**: `FINGERPRINT_DELETE`
+```cpp
+void handleFingerprintDelete(JsonObject data) {
+  int fingerprintId = data["fingerprintId"];
+  uint8_t p = finger.deleteModel(fingerprintId);
+  
+  if (p == FINGERPRINT_OK) {
+    sendResponse(true, "Fingerprint deleted successfully");
+  } else {
+    sendResponse(false, "Failed to delete fingerprint");
+  }
+}
+```
+
+**Python API**: `POST /api/fingerprint/delete`
+```python
+@app.route('/api/fingerprint/delete', methods=['POST'])
+def delete_fingerprint():
+    result = send_arduino_command('FINGERPRINT_DELETE', {
+        'fingerprintId': fingerprint_id
+    })
+    return jsonify(result)
+```
+
+**C# Service**: `DeleteFingerprintAsync()`
+```csharp
+public async Task<bool> DeleteFingerprintAsync(int fingerprintId)
+{
+    var response = await _httpClient.PostAsJsonAsync("/api/fingerprint/delete", 
+        new { fingerprintId });
+    return response.IsSuccessStatusCode;
+}
+```
+
+**Automatic Cleanup**: Called in `StopChargingAsync()`
+```csharp
+// Delete fingerprint from AS608 sensor to free up memory
+if (fingerprintIdToDelete.HasValue)
+{
+    var deleted = await _arduinoService.DeleteFingerprintAsync(fingerprintIdToDelete.Value);
+    _logger.LogInformation($"Fingerprint {fingerprintIdToDelete.Value} deleted from sensor");
+}
+```
+
+### When Fingerprints Are Deleted
+
+✅ **Normal session end** - User scans fingerprint to unlock and leave  
+✅ **Timeout expiration** - Charging time expires, automatic cleanup  
+✅ **Manual stop** - User ends session via UI  
+
+❌ **NOT deleted during temporary access** - "Access Device (2s unlock)" preserves fingerprint
+
+### Error Handling
+
+**Graceful Failure**:
+- Session always ends normally, even if deletion fails
+- User can retrieve device regardless of deletion status
+- Errors logged for operator review
+- Non-blocking operation
+
+See **FINGERPRINT_DELETION_FEATURE.md** for complete documentation.
+
+---
+
+---
+
+## 🔧 Latest Feature: Configurable Hardware Behavior
+
+### Overview
+All hardware components (relays, solenoids, UV lights) now use easy-to-configure constants. No more searching through code to fix backwards hardware!
+
+### Configuration Section (Lines 30-45)
+
+```cpp
+// ===== HARDWARE CONFIGURATION =====
+// Relay configuration (slots 1-13)
+const int RELAY_ON = HIGH;      // Change to LOW if relays are active-low
+const int RELAY_OFF = LOW;      // Change to HIGH if relays are active-low
+
+// Solenoid lock configuration (slots 4-13)
+const int SOLENOID_LOCKED = HIGH;    // Change to LOW to reverse lock behavior
+const int SOLENOID_UNLOCKED = LOW;   // Change to HIGH to reverse lock behavior
+
+// UV light configuration (slots 4-9)
+const int UV_LIGHT_ON = HIGH;   // Change to LOW if UV lights are active-low
+const int UV_LIGHT_OFF = LOW;   // Change to HIGH if UV lights are active-low
+// ===================================
+```
+
+### Benefits
+
+**Flexibility**:
+- ✅ Works with Active-HIGH or Active-LOW relays
+- ✅ Works with any solenoid type (Normally Open/Normally Closed)
+- ✅ Adapts to different UV light modules
+- ✅ Mix and match different hardware types
+
+**Ease of Use**:
+- ✅ Edit only 2 lines per component type
+- ✅ Simple HIGH ↔ LOW swap
+- ✅ No programming knowledge needed
+- ✅ Takes 30 seconds to reconfigure
+- ✅ All instances update automatically
+
+### Quick Configuration
+
+**If Component Works Backwards**:
+1. Open `arduino_sketch.ino`
+2. Find configuration section (lines 30-45)
+3. Swap HIGH and LOW for that component
+4. Upload to Arduino
+5. Test - Done!
+
+**Common Scenarios**:
+
+| Scenario | Configuration | Use When |
+|----------|--------------|----------|
+| Standard (Default) | HIGH = ON/LOCKED, LOW = OFF/UNLOCKED | Most common setup |
+| Reversed | LOW = ON/LOCKED, HIGH = OFF/UNLOCKED | Active-LOW modules |
+| Mixed | Each component configured independently | Different hardware types |
+
+### Testing
+
+**Test Relay**:
+```bash
+curl -X POST http://localhost:5000/api/relay \
+  -H "Content-Type: application/json" \
+  -d '{"slotNumber": 1, "state": true}'
+```
+
+**Test Solenoid**:
+```bash
+curl -X POST http://localhost:5000/api/solenoid \
+  -H "Content-Type: application/json" \
+  -d '{"slotNumber": 4, "locked": true}'
+```
+
+**Test UV Light**:
+```bash
+curl -X POST http://localhost:5000/api/uv-light \
+  -H "Content-Type: application/json" \
+  -d '{"slotNumber": 4, "state": true}'
+```
+
+**If backwards**: Swap HIGH/LOW in configuration and re-test.
+
+See **HARDWARE_CONFIG_GUIDE.md** for complete configuration guide with detailed testing procedures and troubleshooting.
+
+---
+
 **Last Updated**: October 17, 2025
-**Version**: 2.0
+**Version**: 2.2 (Added Hardware Configuration)
 **Status**: Production Ready ✅
 
