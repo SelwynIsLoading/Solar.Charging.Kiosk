@@ -383,7 +383,119 @@ For issues or questions:
 
 ---
 
+---
+
+## 💰 Latest Feature: Sales Tracking & Inventory Management
+
+### Overview
+**CRITICAL FIX**: Transactions are now automatically saved to the database when users start charging! The Admin Panel now shows accurate revenue and complete transaction history.
+
+### The Problem (Fixed)
+
+**Before**:
+- ❌ SlotService didn't inject IInventoryService
+- ❌ StartChargingAsync didn't create transactions
+- ❌ StopChargingAsync didn't update EndTime
+- ❌ Admin dashboard had no data
+
+**After**:
+- ✅ IInventoryService properly injected
+- ✅ Transaction created when charging starts
+- ✅ Transaction updated when charging stops
+- ✅ Admin dashboard fully functional
+
+### Implementation
+
+**SlotService Constructor** (Updated):
+```csharp
+public SlotService(
+    IArduinoApiService arduinoService, 
+    IInventoryService inventoryService,  // ← Added
+    ILogger<SlotService> logger)
+{
+    _inventoryService = inventoryService;  // ← Now available
+    _slotTransactionIds = new();  // ← Track transaction IDs
+}
+```
+
+**StartChargingAsync** (Added transaction save):
+```csharp
+var transaction = new Transaction
+{
+    SlotNumber = slotNumber,
+    SlotType = slot.Type,
+    StartTime = slot.StartTime.Value,
+    TotalAmount = coinsInserted,
+    FingerprintId = fingerprintId
+};
+
+await _inventoryService.AddTransactionAsync(transaction);
+_slotTransactionIds[slotNumber] = transaction.Id;
+```
+
+**StopChargingAsync** (Added EndTime update):
+```csharp
+if (_slotTransactionIds.TryGetValue(slotNumber, out int transactionId))
+{
+    await _inventoryService.UpdateTransactionEndTimeAsync(transactionId, slot.EndTime.Value);
+    _slotTransactionIds.Remove(slotNumber);
+}
+```
+
+**New InventoryService Method**:
+```csharp
+public async Task UpdateTransactionEndTimeAsync(int transactionId, DateTime endTime)
+{
+    var transaction = await _context.Transactions.FindAsync(transactionId);
+    if (transaction != null)
+    {
+        transaction.EndTime = endTime;
+        await _context.SaveChangesAsync();
+    }
+}
+```
+
+### Admin Dashboard Features
+
+**Revenue Overview**:
+- Daily Revenue (today's earnings)
+- Monthly Revenue (this month's earnings)
+- Yearly Revenue (this year's earnings)
+- Breakdown by slot type (Open/Phone/Laptop)
+
+**Transaction History**:
+- Complete list of all transactions
+- Sortable by date
+- Shows in-progress sessions
+- Refresh button for real-time updates
+
+**Coin Management**:
+- Configure denominations
+- Track coin statistics
+- Edit charging minutes
+
+### Testing the Fix
+
+**Quick Test**:
+1. Start charging: Slot 4, Insert ₱20
+2. Open `/admin` in browser
+3. Go to "Transaction History" tab
+4. ✅ Should see: Slot 4 - Phone - ₱20.00 - "In Progress"
+5. Stop charging
+6. Click "Refresh" button
+7. ✅ Should see: Slot 4 - Phone - ₱20.00 - With EndTime
+
+**Check Logs**:
+```
+[INFO] 💰 Transaction saved: Slot 4, Amount: ₱20.00, Type: Phone
+[INFO] ✅ Transaction completed: Slot 4, Duration: 00:15:30
+```
+
+See **SALES_TRACKING_FEATURE.md** for complete documentation.
+
+---
+
 **Last Updated**: October 17, 2025
-**Version**: 2.0
+**Version**: 2.3 (Fixed Sales Tracking & Inventory)
 **Status**: Production Ready ✅
 

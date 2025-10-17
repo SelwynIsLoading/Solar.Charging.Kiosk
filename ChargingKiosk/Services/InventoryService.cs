@@ -45,6 +45,17 @@ public class InventoryService : IInventoryService
         _logger.LogInformation($"Transaction added for slot {transaction.SlotNumber}");
     }
 
+    public async Task UpdateTransactionEndTimeAsync(int transactionId, DateTime endTime)
+    {
+        var transaction = await _context.Transactions.FindAsync(transactionId);
+        if (transaction != null)
+        {
+            transaction.EndTime = endTime;
+            await _context.SaveChangesAsync();
+            _logger.LogInformation($"Transaction {transactionId} updated with end time: {endTime}");
+        }
+    }
+
     public async Task<List<CoinDenomination>> GetCoinDenominationsAsync()
     {
         return await _context.CoinDenominations.Where(d => d.IsActive).ToListAsync();

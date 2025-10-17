@@ -6,11 +6,14 @@ public class SlotService : ISlotService
 {
     private readonly List<ChargingSlot> _slots;
     private readonly IArduinoApiService _arduinoService;
+    private readonly IInventoryService _inventoryService;
     private readonly ILogger<SlotService> _logger;
+    private readonly Dictionary<int, int> _slotTransactionIds = new(); // Track transaction IDs per slot
 
-    public SlotService(IArduinoApiService arduinoService, ILogger<SlotService> logger)
+    public SlotService(IArduinoApiService arduinoService, IInventoryService inventoryService, ILogger<SlotService> logger)
     {
         _arduinoService = arduinoService;
+        _inventoryService = inventoryService;
         _logger = logger;
         _slots = InitializeSlots();
     }
@@ -88,6 +91,31 @@ public class SlotService : ISlotService
         slot.StartTime = DateTime.Now;
         slot.Status = SlotStatus.InUse;
         
+        // ✅ CREATE AND SAVE TRANSACTION TO DATABASE
+        try
+        {
+            var transaction = new Transaction
+            {
+                SlotNumber = slotNumber,
+                SlotType = slot.Type,
+                StartTime = slot.StartTime.Value,
+                TotalAmount = coinsInserted,
+                FingerprintId = fingerprintId
+            };
+            
+            await _inventoryService.AddTransactionAsync(transaction);
+            
+            // Store transaction ID for later update
+            _slotTransactionIds[slotNumber] = transaction.Id;
+            
+            _logger.LogInformation($"💰 Transaction saved: Slot {slotNumber}, Amount: ₱{coinsInserted:F2}, Type: {slot.Type}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to save transaction for slot {slotNumber}");
+            // Continue with charging even if transaction save fails
+        }
+        
         // Turn on relay
         await ControlRelayAsync(slotNumber, true);
         
@@ -125,6 +153,24 @@ public class SlotService : ISlotService
         slot.EndTime = DateTime.Now;
         slot.Status = SlotStatus.Available;
         slot.FingerprintId = null;
+        
+        // ✅ UPDATE TRANSACTION WITH END TIME IN DATABASE
+        try
+        {
+            if (_slotTransactionIds.TryGetValue(slotNumber, out int transactionId))
+            {
+                await _inventoryService.UpdateTransactionEndTimeAsync(transactionId, slot.EndTime.Value);
+                _slotTransactionIds.Remove(slotNumber);
+                
+                var duration = slot.EndTime.Value - (slot.StartTime ?? slot.EndTime.Value);
+                _logger.LogInformation($"✅ Transaction completed: Slot {slotNumber}, Duration: {duration:hh\\:mm\\:ss}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to update transaction end time for slot {slotNumber}");
+            // Continue with stopping charging even if transaction update fails
+        }
         
         // Turn off relay
         await ControlRelayAsync(slotNumber, false);

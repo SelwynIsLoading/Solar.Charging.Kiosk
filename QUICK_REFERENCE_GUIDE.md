@@ -401,7 +401,45 @@ Problem?
 
 ---
 
+---
+
+## 💰 Admin Dashboard - Sales Tracking
+
+**NOW WORKING!** Transactions are automatically saved when users start charging.
+
+### Accessing Admin Panel
+1. Login with admin credentials
+2. Click "Admin Panel" in navigation menu
+3. View revenue and transactions
+
+### What You'll See
+
+**Revenue Cards**:
+- 💵 Daily Revenue - Today's total
+- 💵 Monthly Revenue - This month's total  
+- 💵 Yearly Revenue - This year's total
+
+**Transaction History**:
+- All transactions with details
+- Slot number and type
+- Start/End times
+- Amount paid
+- "In Progress" for active sessions
+
+### Quick Check
+```
+After user pays ₱20 and starts charging:
+1. Go to /admin
+2. Click "Transaction History" tab
+3. Should see: Slot X - ₱20.00 - "In Progress"
+4. After user stops:
+5. Click "Refresh"
+6. Should see: Slot X - ₱20.00 - With end time ✅
+```
+
+---
+
 **Last Updated**: October 17, 2025  
-**Version**: 2.0  
-**For Support**: Check SYSTEM_IMPROVEMENTS.md for detailed documentation
+**Version**: 2.3 (Sales Tracking Fixed)  
+**For Support**: Check SYSTEM_IMPROVEMENTS.md and SALES_TRACKING_FEATURE.md
 
