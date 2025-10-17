@@ -264,28 +264,74 @@
                     <!-- Unlock/Stop Section -->
                     @if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
                     {
-                        <!-- Fingerprint Unlock -->
+                        <!-- Access Device (Temporary Unlock) -->
                         <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
                             <MudText Typo="Typo.h6" Class="mb-3">
-                                <MudIcon Icon="@Icons.Material.Filled.Fingerprint" /> Unlock Slot
+                                <MudIcon Icon="@Icons.Material.Filled.Fingerprint" /> Access Device
                             </MudText>
                             <MudStack Row="false" Spacing="2">
-                                @if (!_isUnlocking)
+                                @if (!_isAccessingDevice)
                                 {
                                     <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;">
                                         <MudText Typo="Typo.body2">
-                                            <strong>To retrieve your device:</strong> Place the same finger you used to enroll on the sensor.
+                                            <strong>Need to check your device?</strong> Scan your fingerprint for temporary 2-second access.
+                                            Charging will continue.
                                         </MudText>
                                     </MudAlert>
                                     <MudButton 
                                         Variant="Variant.Filled" 
-                                        Color="Color.Success"
+                                        Color="Color.Info"
                                         Size="Size.Large"
                                         FullWidth="true"
-                                        StartIcon="@Icons.Material.Filled.Fingerprint"
+                                        StartIcon="@Icons.Material.Filled.Lock"
+                                        OnClick="AccessDevice"
+                                        Style="background: white; color: #667eea; padding: 12px; font-size: 1.1rem;">
+                                        Access Device (2s unlock)
+                                    </MudButton>
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudProgressCircular Color="Color.Default" Size="Size.Small" Indeterminate="true" />
+                                            <MudText Typo="Typo.body1">
+                                                <strong>Place your finger on the sensor...</strong>
+                                            </MudText>
+                                        </MudStack>
+                                    </MudAlert>
+                                    
+                                    @if (_accessProgress > 0)
+                                    {
+                                        <MudProgressLinear Color="Color.Success" Value="_accessProgress" Size="Size.Large" Class="mt-2">
+                                            <MudText Typo="Typo.body2">@_accessMessage</MudText>
+                                        </MudProgressLinear>
+                                    }
+                                }
+                            </MudStack>
+                        </MudPaper>
+                        
+                        <!-- Stop Charging (End Session) -->
+                        <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Stop" /> End Charging Session
+                            </MudText>
+                            <MudStack Row="false" Spacing="2">
+                                @if (!_isUnlocking)
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;">
+                                        <MudText Typo="Typo.body2">
+                                            <strong>Ready to leave?</strong> Scan your fingerprint to unlock and end your charging session.
+                                        </MudText>
+                                    </MudAlert>
+                                    <MudButton 
+                                        Variant="Variant.Filled" 
+                                        Color="Color.Error"
+                                        Size="Size.Large"
+                                        FullWidth="true"
+                                        StartIcon="@Icons.Material.Filled.ExitToApp"
                                         OnClick="InitiateUnlock"
-                                        Style="background: white; color: #667eea; padding: 15px; font-size: 1.2rem;">
-                                        Scan Fingerprint to Unlock
+                                        Style="padding: 12px; font-size: 1.1rem;">
+                                        End Session & Unlock
                                     </MudButton>
                                 }
                                 else
@@ -379,6 +425,9 @@
     private bool _isUnlocking = false;
     private int _unlockProgress = 0;
     private string _unlockMessage = "";
+    private bool _isAccessingDevice = false;
+    private int _accessProgress = 0;
+    private string _accessMessage = "";
     private bool _isCharging = false;
     private Timer? _timer;
     private Timer? _coinListenerTimer;
@@ -616,6 +665,78 @@
         }
     }
 
+    private async Task AccessDevice()
+    {
+        if (_slot == null || _isAccessingDevice) return;
+        
+        _isAccessingDevice = true;
+        _accessProgress = 0;
+        _accessMessage = "Initializing fingerprint scanner...";
+        
+        try
+        {
+            // Step 1: Initialize
+            _accessProgress = 25;
+            _accessMessage = "Place your finger on the sensor...";
+            Snackbar.Add("Place your enrolled finger on the sensor", Severity.Info);
+            StateHasChanged();
+            
+            await Task.Delay(1000);
+            
+            // Step 2: Scanning
+            _accessProgress = 50;
+            _accessMessage = "Verifying fingerprint...";
+            Snackbar.Add("Verifying...", Severity.Info);
+            StateHasChanged();
+            
+            // Verify fingerprint matches the enrolled one
+            var verified = await VerifyFingerprintForUnlock(_enrolledFingerprintId);
+            
+            if (!verified)
+            {
+                _accessProgress = 0;
+                _accessMessage = "";
+                _isAccessingDevice = false;
+                Snackbar.Add("❌ Fingerprint does not match! Access denied.", Severity.Error);
+                return;
+            }
+            
+            // Step 3: Verified - Unlock temporarily
+            _accessProgress = 75;
+            _accessMessage = "Fingerprint verified! Unlocking for 2 seconds...";
+            Snackbar.Add("✓ Verified! Door unlocking for 2 seconds...", Severity.Success);
+            StateHasChanged();
+            
+            // Call temporary unlock (2-second pulse)
+            var success = await SlotService.UnlockTemporaryAsync(SlotNumber, _enrolledFingerprintId);
+            
+            if (success)
+            {
+                _accessProgress = 100;
+                _accessMessage = "Access granted! Re-locking...";
+                Snackbar.Add("✓ Access granted! Door will re-lock automatically.", Severity.Success);
+                StateHasChanged();
+                
+                await Task.Delay(2500);
+            }
+            else
+            {
+                Snackbar.Add("Failed to unlock. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _accessProgress = 0;
+            _accessMessage = "";
+            _isAccessingDevice = false;
+            StateHasChanged();
+        }
+    }
+
     private async Task InitiateUnlock()
     {
         if (_slot == null || _isUnlocking) return;
@@ -654,15 +775,15 @@
             
             // Step 3: Verified
             _unlockProgress = 80;
-            _unlockMessage = "Fingerprint verified! Unlocking...";
-            Snackbar.Add("✓ Fingerprint verified! Unlocking slot...", Severity.Success);
+            _unlockMessage = "Fingerprint verified! Ending session...";
+            Snackbar.Add("✓ Fingerprint verified! Ending charging session...", Severity.Success);
             StateHasChanged();
             
             await Task.Delay(1000);
             
             // Step 4: Unlock
             _unlockProgress = 100;
-            _unlockMessage = "Unlocking complete!";
+            _unlockMessage = "Session ended!";
             StateHasChanged();
             
             await Task.Delay(500);

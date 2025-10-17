@@ -8,4 +8,5 @@ public interface IArduinoApiService
     Task<bool> VerifyFingerprintAsync(int fingerprintId);
     Task<bool> EnrollFingerprintAsync(int fingerprintId);
     Task<decimal> GetCoinSlotValueAsync();
+    Task<bool> UnlockTemporaryAsync(int slotNumber);
 }

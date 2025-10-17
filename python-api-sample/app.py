@@ -41,13 +41,22 @@ def send_arduino_command(command, data, timeout=10):
         if command == 'FINGERPRINT_ENROLL':
             return handle_enrollment_response(timeout)
         
+        # For fingerprint verification, we need to wait for sensor scan
+        if command == 'FINGERPRINT_VERIFY':
+            return handle_verification_response(timeout)
+        
         # Standard response handling
-        time.sleep(0.1)
+        time.sleep(0.15)  # Slightly longer delay for reliability
         
         if arduino.in_waiting > 0:
             response = arduino.readline().decode().strip()
             print(f"← Received from Arduino: {response}")
-            return json.loads(response)
+            
+            try:
+                return json.loads(response)
+            except json.JSONDecodeError:
+                print(f"⚠ Non-JSON response: {response}")
+                return {"success": True}
         
         return {"success": True}
     except Exception as e:
@@ -97,6 +106,43 @@ def handle_enrollment_response(timeout=10):
     
     print("--- Enrollment Timeout ---\n")
     return final_result if final_result else {"success": False, "error": "Timeout"}
+
+def handle_verification_response(timeout=10):
+    """
+    Handle fingerprint verification response from Arduino
+    AS608 verification may send status updates before final result
+    """
+    start_time = time.time()
+    final_result = None
+    
+    print("\n--- AS608 Verification Process ---")
+    
+    while (time.time() - start_time) < timeout:
+        if arduino.in_waiting > 0:
+            try:
+                response = arduino.readline().decode().strip()
+                print(f"← {response}")
+                
+                result = json.loads(response)
+                
+                # Status updates during verification
+                if 'status' in result:
+                    print(f"   Status: {result['status']}")
+                
+                # Final result
+                if 'success' in result or 'isValid' in result:
+                    final_result = result
+                    print("--- Verification Complete ---\n")
+                    return final_result
+                        
+            except json.JSONDecodeError:
+                # Non-JSON response, might be debug output
+                continue
+        
+        time.sleep(0.1)
+    
+    print("--- Verification Timeout ---\n")
+    return final_result if final_result else {"success": True, "isValid": False, "error": "Timeout"}
 
 @app.route('/api/relay', methods=['POST'])
 def control_relay():
@@ -189,16 +235,17 @@ def verify_fingerprint():
 @app.route('/api/coin-slot', methods=['GET'])
 def get_coin_value():
     """
-    Get coin slot value - called by UI every 500ms for real-time detection
-    Returns: { "value": coin_amount }
+    Get coin slot value - called by UI every 2 seconds for real-time detection
+    Returns: { "value": coin_amount, "timestamp": detection_time }
     """
-    result = send_arduino_command('READ_COIN', {})
+    result = send_arduino_command('READ_COIN', {}, timeout=2)
     
     coin_value = result.get('value', 0)
+    timestamp = result.get('timestamp', 0)
     
     # Log only when coin is detected (avoid spam)
     if coin_value > 0:
-        print(f"💰 Coin detected: ₱{coin_value:.2f}")
+        print(f"💰 Coin detected: ₱{coin_value:.2f} (Timestamp: {timestamp})")
     
     # Simulate coin value for demo/testing (when no Arduino)
     if result.get('simulated'):
@@ -207,8 +254,25 @@ def get_coin_value():
     
     return jsonify({
         'value': coin_value,
-        'timestamp': result.get('timestamp', 0)
+        'timestamp': timestamp
     }), 200
+
+@app.route('/api/solenoid/unlock-temp', methods=['POST'])
+def unlock_temp():
+    """
+    Temporarily unlock solenoid for 2 seconds (for device access during charging)
+    Sends pulse to unlock, waits 2 seconds, then automatically re-locks
+    """
+    data = request.json
+    slot_number = data.get('slotNumber')
+    
+    print(f"Temporary unlock - Slot {slot_number}")
+    
+    result = send_arduino_command('UNLOCK_TEMP', {
+        'slot': slot_number
+    })
+    
+    return jsonify(result), 200 if result.get('success') else 500
 
 @app.route('/api/fingerprint/enroll', methods=['POST'])
 def enroll_fingerprint():

@@ -31,6 +31,7 @@ volatile int coinPulseCount = 0;
 float coinValue = 0.0;
 unsigned long coinDetectedTime = 0;
 bool coinProcessed = false;
+unsigned long lastCoinPulseTime = 0;
 
 void setup() {
   Serial.begin(9600);
@@ -119,6 +120,8 @@ void processCommand(String jsonString) {
     handleFingerprintEnroll(data);
   } else if (command == "READ_COIN") {
     handleReadCoin();
+  } else if (command == "UNLOCK_TEMP") {
+    handleUnlockTemp(data);
   } else {
     sendResponse(false, "Unknown command");
   }
@@ -383,52 +386,85 @@ void handleReadCoin() {
 }
 
 void coinInterrupt() {
+  unsigned long currentTime = millis();
+  
+  // Debounce: ignore pulses within 10ms of each other (noise)
+  if (currentTime - lastCoinPulseTime < 10) {
+    return;
+  }
+  
   coinPulseCount++;
-  // Don't process immediately - wait for pulse train to complete
-  coinDetectedTime = millis();
+  lastCoinPulseTime = currentTime;
+  coinDetectedTime = currentTime;
 }
 
 void processCoinPulse() {
   unsigned long currentTime = millis();
   
-  // Only process if we have pulses AND enough time passed since last pulse (debounce)
-  if (coinPulseCount > 0 && (currentTime - coinDetectedTime > 200)) {
+  // Only process if we have pulses AND enough time passed since last pulse
+  // Wait 300ms after last pulse to ensure pulse train is complete
+  if (coinPulseCount > 0 && (currentTime - coinDetectedTime > 300)) {
     
     int pulses = coinPulseCount;
     float detectedValue = 0.0;
     
     // Different pulse counts for different denominations
     // Adjust based on your coin acceptor configuration
+    // Using ranges to handle slight variations in pulse counting
     if (pulses == 1) {
       detectedValue = 1.0;  // 1 Peso
     } else if (pulses >= 2 && pulses <= 6) {
-      detectedValue = 5.0;  // 5 Pesos (usually 5 pulses, allow range)
+      detectedValue = 5.0;  // 5 Pesos (typically 5 pulses)
     } else if (pulses >= 7 && pulses <= 12) {
-      detectedValue = 10.0; // 10 Pesos (usually 10 pulses)
+      detectedValue = 10.0; // 10 Pesos (typically 10 pulses)
     } else if (pulses >= 13 && pulses <= 22) {
-      detectedValue = 20.0; // 20 Pesos (usually 20 pulses)
+      detectedValue = 20.0; // 20 Pesos (typically 20 pulses)
     }
     
     if (detectedValue > 0) {
       coinValue = detectedValue;
       
-      // Send notification to serial
-      Serial.print("{\"coinDetected\":");
-      Serial.print(coinValue, 2);
-      Serial.print(",\"pulses\":");
-      Serial.print(pulses);
-      Serial.println("}");
+      // Send notification to serial with timestamp
+      StaticJsonDocument<128> doc;
+      doc["coinDetected"] = coinValue;
+      doc["pulses"] = pulses;
+      doc["timestamp"] = currentTime;
+      
+      String response;
+      serializeJson(doc, response);
+      Serial.println(response);
       
       coinDetectedTime = currentTime;
       coinProcessed = false; // Ready to be read by API
     } else {
-      // Unknown pulse count
-      Serial.print("{\"warning\":\"Unknown pulse count: ");
-      Serial.print(pulses);
-      Serial.println("\"}");
+      // Unknown pulse count - log for debugging
+      StaticJsonDocument<128> doc;
+      doc["warning"] = "Unknown pulse count";
+      doc["pulses"] = pulses;
+      doc["timestamp"] = currentTime;
+      
+      String response;
+      serializeJson(doc, response);
+      Serial.println(response);
     }
     
+    // Reset counter
     coinPulseCount = 0;
+  }
+}
+
+void handleUnlockTemp(JsonObject data) {
+  int slot = data["slot"];
+  
+  // Temporary unlock for slots 4-13 (pulse for 2 seconds to unlock)
+  if (slot >= 4 && slot <= 13) {
+    // Send LOW pulse for 2 seconds to unlock (normally HIGH = locked)
+    digitalWrite(SOLENOID_PINS[slot - 4], LOW);
+    delay(2000);  // Hold unlock for 2 seconds
+    digitalWrite(SOLENOID_PINS[slot - 4], HIGH); // Re-lock
+    sendResponse(true, "Temporary unlock completed");
+  } else {
+    sendResponse(false, "Invalid slot number for solenoid");
   }
 }
 

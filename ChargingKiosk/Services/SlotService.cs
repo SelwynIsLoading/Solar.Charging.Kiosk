@@ -219,5 +219,50 @@ public class SlotService : ISlotService
             return false;
         }
     }
+
+    public async Task<bool> UnlockTemporaryAsync(int slotNumber, int fingerprintId)
+    {
+        var slot = GetSlot(slotNumber);
+        
+        // Only phone and laptop slots can be unlocked
+        if (slot.Type != SlotType.Phone && slot.Type != SlotType.Laptop)
+        {
+            _logger.LogWarning($"Slot {slotNumber} is not a secured slot type");
+            return false;
+        }
+        
+        // Verify the slot is in use and locked
+        if (slot.Status != SlotStatus.InUse && slot.Status != SlotStatus.Locked)
+        {
+            _logger.LogWarning($"Slot {slotNumber} is not in use");
+            return false;
+        }
+        
+        // Verify fingerprint matches
+        if (!slot.FingerprintId.HasValue || slot.FingerprintId.Value != fingerprintId)
+        {
+            _logger.LogWarning($"Fingerprint ID mismatch for slot {slotNumber}");
+            
+            // Still attempt verification with Arduino
+            var verified = await VerifyFingerprintAsync(fingerprintId);
+            if (!verified)
+            {
+                return false;
+            }
+        }
+        
+        try
+        {
+            // Send temporary unlock command (2-second pulse)
+            await _arduinoService.UnlockTemporaryAsync(slotNumber);
+            _logger.LogInformation($"Slot {slotNumber} temporarily unlocked for device access");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to temporarily unlock slot {slotNumber}");
+            return false;
+        }
+    }
 }
 

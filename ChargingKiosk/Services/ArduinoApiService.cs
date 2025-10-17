@@ -150,6 +150,26 @@ public class ArduinoApiService : IArduinoApiService
             return 0;
         }
     }
+
+    public async Task<bool> UnlockTemporaryAsync(int slotNumber)
+    {
+        try
+        {
+            _logger.LogInformation($"Temporary unlock for slot {slotNumber}");
+            
+            var response = await _httpClient.PostAsJsonAsync("/api/solenoid/unlock-temp", new
+            {
+                slotNumber
+            });
+            
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to temporarily unlock slot {slotNumber}");
+            return false;
+        }
+    }
     
     private class FingerprintResponse
     {

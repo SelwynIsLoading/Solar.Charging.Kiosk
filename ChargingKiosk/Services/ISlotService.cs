@@ -12,6 +12,7 @@ public interface ISlotService
     Task<bool> LockSlotAsync(int slotNumber, bool lockState);
     Task<bool> StartUVSanitizationAsync(int slotNumber);
     Task<bool> VerifyFingerprintAsync(int fingerprintId);
+    Task<bool> UnlockTemporaryAsync(int slotNumber, int fingerprintId);
     void SetChargingMinutes(int slotNumber, int minutes);
 }
 
