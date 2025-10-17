@@ -6,4 +6,3 @@ namespace ChargingKiosk.Data;
 public class ApplicationUser : IdentityUser
 {
 }
-

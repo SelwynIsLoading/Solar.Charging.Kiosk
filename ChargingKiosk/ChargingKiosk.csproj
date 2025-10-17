@@ -5,6 +5,7 @@
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
         <UserSecretsId>aspnet-ChargingKiosk-92ccde49-59f5-450f-b0c2-58d3d33e9759</UserSecretsId>
+        <RunAOTCompilation>false</RunAOTCompilation>
     </PropertyGroup>
 
     <ItemGroup>
@@ -16,6 +17,7 @@
         <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.4"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="9.0.4"/>
         <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.4"/>
+        <PackageReference Include="MudBlazor" Version="7.23.0"/>
     </ItemGroup>
 
 </Project>

@@ -1,0 +1,185 @@
+@page "/slots"
+@inject ISlotService SlotService
+@inject NavigationManager Navigation
+@implements IDisposable
+
+<PageTitle>Charging Slots - Solar Charging Station</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4" Style="min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
+    <MudPaper Elevation="0" Class="pa-4 mb-4" Style="background: transparent;">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudStack Row="false" Spacing="1">
+                <MudText Typo="Typo.h4" Style="font-weight: bold; color: #333;">
+                    <MudIcon Icon="@Icons.Material.Filled.Bolt" Color="Color.Warning" Size="Size.Large" Style="vertical-align: middle;" />
+                    Select a Charging Slot
+                </MudText>
+                <MudText Typo="Typo.body2" Style="color: #666;">
+                    Choose an available slot to start charging your device
+                </MudText>
+            </MudStack>
+            <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.Home" Href="/" Color="Color.Primary">
+                Back to Home
+            </MudButton>
+        </MudStack>
+    </MudPaper>
+
+    <!-- Open Slots (1-3) -->
+    <MudText Typo="Typo.h5" Class="mb-3 mt-4" Style="font-weight: bold; color: #667eea;">
+        <MudIcon Icon="@Icons.Material.Filled.Outlet" /> Open Slots (No Security)
+    </MudText>
+    <MudGrid Spacing="3" Class="mb-6">
+        @foreach (var slot in _slots.Where(s => s.Type == SlotType.Open))
+        {
+            <MudItem xs="12" sm="6" md="4">
+                <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;" 
+                         Class="@(slot.Status == SlotStatus.Available ? "cursor-pointer hover-card" : "")"
+                         @onclick="@(() => SelectSlot(slot))">
+                    <MudCardContent>
+                        <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@slot.IconClass" Size="Size.Large" Color="Color.Primary" Style="font-size: 60px;" />
+                            <MudText Typo="Typo.h6" Style="font-weight: bold;">@slot.DisplayName</MudText>
+                            <MudChip T="string" Color="@GetStatusColor(slot.Status)" Size="Size.Small" Text="@slot.Status.ToString()" />
+                            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="text-center">
+                                Simple plug and charge
+                            </MudText>
+                        </MudStack>
+                    </MudCardContent>
+                    @if (slot.Status == SlotStatus.Available)
+                    {
+                        <MudCardActions Class="justify-center pb-4">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PlayArrow">
+                                Start Charging
+                            </MudButton>
+                        </MudCardActions>
+                    }
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <!-- Phone Slots (4-9) -->
+    <MudText Typo="Typo.h5" Class="mb-3 mt-4" Style="font-weight: bold; color: #764ba2;">
+        <MudIcon Icon="@Icons.Material.Filled.PhoneAndroid" /> Phone Slots (Secure with UV Sanitization)
+    </MudText>
+    <MudGrid Spacing="3" Class="mb-6">
+        @foreach (var slot in _slots.Where(s => s.Type == SlotType.Phone))
+        {
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;" 
+                         Class="@(slot.Status == SlotStatus.Available ? "cursor-pointer hover-card" : "")"
+                         @onclick="@(() => SelectSlot(slot))">
+                    <MudCardContent>
+                        <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@slot.IconClass" Size="Size.Large" Color="Color.Secondary" Style="font-size: 60px;" />
+                            <MudText Typo="Typo.h6" Style="font-weight: bold;">@slot.DisplayName</MudText>
+                            <MudChip T="string" Color="@GetStatusColor(slot.Status)" Size="Size.Small" Text="@slot.Status.ToString()" />
+                            <MudStack Row="true" Spacing="1" Class="mt-2">
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Fingerprint" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Text="Fingerprint" />
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Text="Lock" />
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Lightbulb" Size="Size.Small" Color="Color.Tertiary" Variant="Variant.Outlined" Text="UV" />
+                            </MudStack>
+                        </MudStack>
+                    </MudCardContent>
+                    @if (slot.Status == SlotStatus.Available)
+                    {
+                        <MudCardActions Class="justify-center pb-4">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PlayArrow">
+                                Start Charging
+                            </MudButton>
+                        </MudCardActions>
+                    }
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <!-- Laptop Slots (10-13) -->
+    <MudText Typo="Typo.h5" Class="mb-3 mt-4" Style="font-weight: bold; color: #f093fb;">
+        <MudIcon Icon="@Icons.Material.Filled.Laptop" /> Laptop Slots (Secure)
+    </MudText>
+    <MudGrid Spacing="3" Class="mb-6">
+        @foreach (var slot in _slots.Where(s => s.Type == SlotType.Laptop))
+        {
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;" 
+                         Class="@(slot.Status == SlotStatus.Available ? "cursor-pointer hover-card" : "")"
+                         @onclick="@(() => SelectSlot(slot))">
+                    <MudCardContent>
+                        <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@slot.IconClass" Size="Size.Large" Color="Color.Tertiary" Style="font-size: 60px;" />
+                            <MudText Typo="Typo.h6" Style="font-weight: bold;">@slot.DisplayName</MudText>
+                            <MudChip T="string" Color="@GetStatusColor(slot.Status)" Size="Size.Small" Text="@slot.Status.ToString()" />
+                            <MudStack Row="true" Spacing="1" Class="mt-2">
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Fingerprint" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined" Text="Fingerprint" />
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Text="Lock" />
+                            </MudStack>
+                        </MudStack>
+                    </MudCardContent>
+                    @if (slot.Status == SlotStatus.Available)
+                    {
+                        <MudCardActions Class="justify-center pb-4">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PlayArrow">
+                                Start Charging
+                            </MudButton>
+                        </MudCardActions>
+                    }
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+</MudContainer>
+
+<style>
+    .hover-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.15) !important;
+    }
+    
+    .cursor-pointer {
+        cursor: pointer;
+    }
+</style>
+
+@code {
+    private List<ChargingSlot> _slots = new();
+    private Timer? _refreshTimer;
+
+    protected override void OnInitialized()
+    {
+        _slots = SlotService.GetAllSlots();
+        
+        // Refresh slot status every 5 seconds to show real-time updates
+        _refreshTimer = new Timer(_ =>
+        {
+            _slots = SlotService.GetAllSlots();
+            InvokeAsync(StateHasChanged);
+        }, null, 5000, 5000);
+    }
+
+    private void SelectSlot(ChargingSlot slot)
+    {
+        if (slot.Status != SlotStatus.Available)
+            return;
+
+        Navigation.NavigateTo($"/slot/{slot.SlotNumber}");
+    }
+
+    private Color GetStatusColor(SlotStatus status)
+    {
+        return status switch
+        {
+            SlotStatus.Available => Color.Success,
+            SlotStatus.InUse => Color.Warning,
+            SlotStatus.Sanitizing => Color.Info,
+            SlotStatus.Locked => Color.Primary,
+            SlotStatus.OutOfService => Color.Error,
+            _ => Color.Default
+        };
+    }
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}
+

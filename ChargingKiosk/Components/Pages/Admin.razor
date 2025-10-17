@@ -1,0 +1,288 @@
+@page "/admin"
+@using System.Globalization
+@using Microsoft.AspNetCore.Authorization
+@inject IInventoryService InventoryService
+@inject ISnackbar Snackbar
+@inject IDialogService DialogService
+@attribute [Authorize]
+
+<PageTitle>Admin Panel - Solar Charging Station</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-4">
+    <MudText Typo="Typo.h3" Class="mb-4" Style="font-weight: bold;">
+        <MudIcon Icon="@Icons.Material.Filled.Dashboard" Size="Size.Large" Style="vertical-align: middle;" />
+        Admin Panel
+    </MudText>
+
+    <!-- Revenue Overview Cards -->
+    <MudGrid Spacing="3" Class="mb-4">
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                <MudCardContent>
+                    <MudStack Row="false" Spacing="2">
+                        <MudText Typo="Typo.h6">Daily Revenue</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight: bold;">₱@_dailyRevenue["Total"].ToString("N2")</MudText>
+                        <MudText Typo="Typo.body2">Today's earnings</MudText>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="4" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                <MudCardContent>
+                    <MudStack Row="false" Spacing="2">
+                        <MudText Typo="Typo.h6">Monthly Revenue</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight: bold;">₱@_monthlyRevenue["Total"].ToString("N2")</MudText>
+                        <MudText Typo="Typo.body2">This month's earnings</MudText>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+        <MudItem xs="12" md="4">
+            <MudCard Elevation="4" Style="background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%); color: white;">
+                <MudCardContent>
+                    <MudStack Row="false" Spacing="2">
+                        <MudText Typo="Typo.h6">Yearly Revenue</MudText>
+                        <MudText Typo="Typo.h3" Style="font-weight: bold;">₱@_yearlyRevenue["Total"].ToString("N2")</MudText>
+                        <MudText Typo="Typo.body2">This year's earnings</MudText>
+                    </MudStack>
+                </MudCardContent>
+            </MudCard>
+        </MudItem>
+    </MudGrid>
+
+    <!-- Tabs for Different Sections -->
+    <MudTabs Elevation="4" Rounded="true" Color="Color.Primary" Class="mb-4">
+        <!-- Revenue Breakdown Tab -->
+        <MudTabPanel Text="Revenue Breakdown" Icon="@Icons.Material.Filled.BarChart">
+            <MudPaper Elevation="0" Class="pa-4">
+                <MudText Typo="Typo.h5" Class="mb-4">Revenue by Slot Type</MudText>
+                <MudGrid>
+                    <MudItem xs="12" md="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.h6" Color="Color.Primary" Class="mb-2">Daily Breakdown</MudText>
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Open Slots</strong></td>
+                                        <td style="text-align: right;">₱@_dailyRevenue["Open Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Phone Slots</strong></td>
+                                        <td style="text-align: right;">₱@_dailyRevenue["Phone Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Laptop Slots</strong></td>
+                                        <td style="text-align: right;">₱@_dailyRevenue["Laptop Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr style="font-weight: bold; border-top: 2px solid #ddd;">
+                                        <td>Total</td>
+                                        <td style="text-align: right;">₱@_dailyRevenue["Total"].ToString("N2")</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.h6" Color="Color.Secondary" Class="mb-2">Monthly Breakdown</MudText>
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Open Slots</strong></td>
+                                        <td style="text-align: right;">₱@_monthlyRevenue["Open Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Phone Slots</strong></td>
+                                        <td style="text-align: right;">₱@_monthlyRevenue["Phone Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Laptop Slots</strong></td>
+                                        <td style="text-align: right;">₱@_monthlyRevenue["Laptop Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr style="font-weight: bold; border-top: 2px solid #ddd;">
+                                        <td>Total</td>
+                                        <td style="text-align: right;">₱@_monthlyRevenue["Total"].ToString("N2")</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" md="4">
+                        <MudPaper Elevation="2" Class="pa-4">
+                            <MudText Typo="Typo.h6" Color="Color.Tertiary" Class="mb-2">Yearly Breakdown</MudText>
+                            <MudSimpleTable Dense="true" Hover="true">
+                                <tbody>
+                                    <tr>
+                                        <td><strong>Open Slots</strong></td>
+                                        <td style="text-align: right;">₱@_yearlyRevenue["Open Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Phone Slots</strong></td>
+                                        <td style="text-align: right;">₱@_yearlyRevenue["Phone Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Laptop Slots</strong></td>
+                                        <td style="text-align: right;">₱@_yearlyRevenue["Laptop Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr style="font-weight: bold; border-top: 2px solid #ddd;">
+                                        <td>Total</td>
+                                        <td style="text-align: right;">₱@_yearlyRevenue["Total"].ToString("N2")</td>
+                                    </tr>
+                                </tbody>
+                            </MudSimpleTable>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudTabPanel>
+
+        <!-- Coin Denominations Tab -->
+        <MudTabPanel Text="Coin Denominations" Icon="@Icons.Material.Filled.Paid">
+            <MudPaper Elevation="0" Class="pa-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+                    <MudText Typo="Typo.h5">Manage Coin Denominations</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadData">
+                        Refresh
+                    </MudButton>
+                </MudStack>
+                
+                <MudTable Items="_coinDenominations" Hover="true" Dense="true" Elevation="2">
+                    <HeaderContent>
+                        <MudTh>Name</MudTh>
+                        <MudTh Style="text-align: right;">Value (₱)</MudTh>
+                        <MudTh Style="text-align: right;">Charging Time</MudTh>
+                        <MudTh Style="text-align: right;">Daily Count</MudTh>
+                        <MudTh Style="text-align: right;">Monthly Count</MudTh>
+                        <MudTh Style="text-align: right;">Yearly Count</MudTh>
+                        <MudTh Style="text-align: center;">Status</MudTh>
+                        <MudTh Style="text-align: center;">Actions</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Name">@context.Name</MudTd>
+                        <MudTd DataLabel="Value" Style="text-align: right;">₱@context.Value.ToString("N2")</MudTd>
+                        <MudTd DataLabel="Charging Time" Style="text-align: right;">
+                            <MudChip T="string" Icon="@Icons.Material.Filled.Timer" Size="Size.Small" Color="Color.Info" Text="@($"{context.ChargingMinutes} min")" />
+                        </MudTd>
+                        <MudTd DataLabel="Daily Count" Style="text-align: right;">@context.DailyCount</MudTd>
+                        <MudTd DataLabel="Monthly Count" Style="text-align: right;">@context.MonthlyCount</MudTd>
+                        <MudTd DataLabel="Yearly Count" Style="text-align: right;">@context.YearlyCount</MudTd>
+                        <MudTd DataLabel="Status" Style="text-align: center;">
+                            <MudChip T="string" Color="@(context.IsActive ? Color.Success : Color.Error)" Size="Size.Small" Text="@(context.IsActive ? "Active" : "Inactive")" />
+                        </MudTd>
+                        <MudTd DataLabel="Actions" Style="text-align: center;">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit" Color="Color.Primary" Size="Size.Small" OnClick="@(() => EditDenomination(context))" />
+                        </MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudTabPanel>
+
+        <!-- Transaction History Tab -->
+        <MudTabPanel Text="Transaction History" Icon="@Icons.Material.Filled.History">
+            <MudPaper Elevation="0" Class="pa-4">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+                    <MudText Typo="Typo.h5">Recent Transactions</MudText>
+                    <MudButton Variant="Variant.Filled" Color="Color.Primary" StartIcon="@Icons.Material.Filled.Refresh" OnClick="LoadData">
+                        Refresh
+                    </MudButton>
+                </MudStack>
+                
+                <MudTable Items="_transactions" Hover="true" Dense="true" Elevation="2">
+                    <HeaderContent>
+                        <MudTh>Slot Number</MudTh>
+                        <MudTh>Slot Type</MudTh>
+                        <MudTh>Start Time</MudTh>
+                        <MudTh>End Time</MudTh>
+                        <MudTh Style="text-align: right;">Amount (₱)</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Slot Number">Slot @context.SlotNumber</MudTd>
+                        <MudTd DataLabel="Slot Type">
+                            <MudChip T="string" Size="Size.Small" Color="@GetSlotTypeColor(context.SlotType)" Text="@context.SlotType.ToString()" />
+                        </MudTd>
+                        <MudTd DataLabel="Start Time">@context.StartTime.ToString("MMM dd, yyyy hh:mm tt")</MudTd>
+                        <MudTd DataLabel="End Time">@(context.EndTime?.ToString("MMM dd, yyyy hh:mm tt") ?? "In Progress")</MudTd>
+                        <MudTd DataLabel="Amount" Style="text-align: right;">₱@context.TotalAmount.ToString("N2")</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudTabPanel>
+    </MudTabs>
+</MudContainer>
+
+@code {
+    private Dictionary<string, decimal> _dailyRevenue = new();
+    private Dictionary<string, decimal> _monthlyRevenue = new();
+    private Dictionary<string, decimal> _yearlyRevenue = new();
+    private List<CoinDenomination> _coinDenominations = new();
+    private List<Transaction> _transactions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            _dailyRevenue = await InventoryService.GetDailyRevenueAsync();
+            _monthlyRevenue = await InventoryService.GetMonthlyRevenueAsync();
+            _yearlyRevenue = await InventoryService.GetYearlyRevenueAsync();
+            _coinDenominations = await InventoryService.GetCoinDenominationsAsync();
+            _transactions = await InventoryService.GetTransactionsAsync();
+            
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading data: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task EditDenomination(CoinDenomination denomination)
+    {
+        var parameters = new DialogParameters<EditDenominationDialog>
+        {
+            { x => x.Denomination, denomination }
+        };
+
+        var options = new DialogOptions 
+        { 
+            CloseButton = true, 
+            MaxWidth = MaxWidth.Small,
+            FullWidth = true,
+            BackdropClick = true
+        };
+
+        var dialog = await DialogService.ShowAsync<EditDenominationDialog>("Edit Coin Denomination", parameters, options);
+        var result = await dialog.Result;
+
+        if (result != null && !result.Canceled)
+        {
+            try
+            {
+                await InventoryService.UpdateCoinDenominationAsync(denomination);
+                await LoadData();
+                Snackbar.Add("Coin denomination updated successfully!", Severity.Success);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error updating denomination: {ex.Message}", Severity.Error);
+            }
+        }
+    }
+
+    private Color GetSlotTypeColor(SlotType type)
+    {
+        return type switch
+        {
+            SlotType.Open => Color.Primary,
+            SlotType.Phone => Color.Secondary,
+            SlotType.Laptop => Color.Tertiary,
+            _ => Color.Default
+        };
+    }
+}
+

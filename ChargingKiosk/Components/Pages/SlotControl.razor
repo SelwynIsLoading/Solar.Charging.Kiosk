@@ -1,0 +1,871 @@
+@page "/slot/{SlotNumber:int}"
+@inject ISlotService SlotService
+@inject IArduinoApiService ArduinoService
+@inject ICoinService CoinService
+@inject NavigationManager Navigation
+@inject ISnackbar Snackbar
+@inject ILogger<SlotControl> Logger
+@implements IDisposable
+
+<PageTitle>Slot @SlotNumber - Solar Charging Station</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="py-4" Style="min-height: 100vh; background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);">
+    @if (_slot != null)
+    {
+        <MudPaper Elevation="8" Class="pa-6" Style="border-radius: 20px;">
+            <MudStack Row="false" Spacing="4">
+                <!-- Header -->
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+                    <MudText Typo="Typo.h4" Style="font-weight: bold;">
+                        <MudIcon Icon="@_slot.IconClass" Size="Size.Large" Style="vertical-align: middle;" />
+                        @_slot.DisplayName
+                    </MudText>
+                    <MudButton Variant="Variant.Outlined" StartIcon="@Icons.Material.Filled.ArrowBack" Href="/slots" Color="Color.Primary">
+                        Back
+                    </MudButton>
+                </MudStack>
+
+                <MudDivider />
+
+                <!-- Status -->
+                <MudAlert Severity="@GetAlertSeverity(_slot.Status)" Variant="Variant.Filled">
+                    <MudText Typo="Typo.h6">Status: @_slot.Status.ToString()</MudText>
+                </MudAlert>
+
+                @if (_slot.Status == SlotStatus.Available && !_isCharging)
+                {
+                    <!-- Coin Insertion -->
+                    <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #ffd89b 0%, #19547b 100%); color: white;">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                            <MudText Typo="Typo.h6">
+                                <MudIcon Icon="@Icons.Material.Filled.AccountBalanceWallet" /> Insert Coins
+                            </MudText>
+                            @if (_isCoinListenerActive)
+                            {
+                                <MudChip T="string" Size="Size.Small" Color="Color.Success" Icon="@Icons.Material.Filled.Circle" Text="Listening" Style="animation: pulse 2s infinite;" />
+                            }
+                        </MudStack>
+                        
+                        <MudGrid Spacing="2">
+                            <MudItem xs="12" sm="6">
+                                <MudPaper Elevation="3" Class="pa-3" Style="text-align: center; background: rgba(255,255,255,0.95); border-radius: 10px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Paid" Size="Size.Large" Color="Color.Warning" Class="coin-icon" />
+                                    <MudText Typo="Typo.caption" Style="color: #666;">Amount Inserted</MudText>
+                                    <MudText Typo="Typo.h4" Style="font-weight: bold; color: #19547b;" Class="amount-display">
+                                        ₱@_coinsInserted.ToString("0.00")
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                            <MudItem xs="12" sm="6">
+                                <MudPaper Elevation="3" Class="pa-3" Style="text-align: center; background: rgba(255,255,255,0.95); border-radius: 10px;">
+                                    <MudIcon Icon="@Icons.Material.Filled.Timer" Size="Size.Large" Color="Color.Success" />
+                                    <MudText Typo="Typo.caption" Style="color: #666;">Charging Time</MudText>
+                                    <MudText Typo="Typo.h4" Style="font-weight: bold; color: #19547b;">
+                                        @_allocatedMinutes min
+                                    </MudText>
+                                </MudPaper>
+                            </MudItem>
+                        </MudGrid>
+                        
+                        <MudAlert Severity="Severity.Info" Dense="true" Class="mt-3" Style="background: rgba(255,255,255,0.2); color: white;">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Info" />
+                                <MudText Typo="Typo.body2">
+                                    @(_isCoinListenerActive ? "Coin acceptor is active. Insert coins now..." : "Click below to activate coin acceptor")
+                                </MudText>
+                            </MudStack>
+                        </MudAlert>
+                        
+                        @if (!_isCoinListenerActive)
+                        {
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="StartCoinListener" FullWidth="true" Class="mt-3" Size="Size.Large">
+                                <MudIcon Icon="@Icons.Material.Filled.PlayArrow" /> Activate Coin Acceptor
+                            </MudButton>
+                        }
+                        else
+                        {
+                            <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="StopCoinListener" FullWidth="true" Class="mt-3" Style="background: rgba(255,255,255,0.1); color: white;">
+                                <MudIcon Icon="@Icons.Material.Filled.Stop" /> Stop Accepting Coins
+                            </MudButton>
+                        }
+                        
+                        <!-- Manual insert for testing -->
+                        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="SimulateCoinInsert" FullWidth="true" Class="mt-2" Style="color: rgba(255,255,255,0.7);">
+                            <MudIcon Icon="@Icons.Material.Filled.Add" /> Simulate Coin (Testing)
+                        </MudButton>
+                        
+                        @if (_denominations.Any())
+                        {
+                            <MudDivider Class="my-3" Style="background: rgba(255,255,255,0.3);" />
+                            <MudText Typo="Typo.caption" Style="color: rgba(255,255,255,0.9); text-align: center;">
+                                <strong>Rates:</strong> @string.Join(", ", _denominations.Select(d => $"₱{d.Value:0} = {d.ChargingMinutes}min"))
+                            </MudText>
+                        }
+                    </MudPaper>
+
+                    @if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+                    {
+                        <!-- Fingerprint Enrollment -->
+                        <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Fingerprint" /> Fingerprint Enrollment
+                            </MudText>
+                            <MudStack Row="false" Spacing="2">
+                                @if (!_fingerprintEnrolled)
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;">
+                                        <MudText Typo="Typo.body2">
+                                            <strong>New Session:</strong> Enroll your fingerprint to secure this slot. 
+                                            You'll need the same finger to retrieve your device.
+                                        </MudText>
+                                    </MudAlert>
+                                    <MudText Typo="Typo.body2" Style="opacity: 0.9;">
+                                        Step 1: Place your finger on the sensor
+                                    </MudText>
+                                    <MudText Typo="Typo.body2" Style="opacity: 0.9;">
+                                        Step 2: Remove and place the same finger again
+                                    </MudText>
+                                    <MudButton 
+                                        Variant="Variant.Filled" 
+                                        Color="Color.Success"
+                                        StartIcon="@Icons.Material.Filled.Fingerprint"
+                                        OnClick="EnrollFingerprint"
+                                        Disabled="_isEnrolling"
+                                        Size="Size.Large"
+                                        Style="background: white; color: #667eea;">
+                                        @(_isEnrolling ? "Enrolling..." : "Enroll Fingerprint")
+                                    </MudButton>
+                                    
+                                    @if (_enrollmentStep > 0)
+                                    {
+                                        <MudProgressLinear Color="Color.Success" Value="_enrollmentProgress" Size="Size.Large" Class="mt-2">
+                                            <MudText Typo="Typo.body2">@_enrollmentMessage</MudText>
+                                        </MudProgressLinear>
+                                    }
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Success" Dense="true" Style="background: rgba(76, 175, 80, 0.3); color: white;">
+                                        <MudText Typo="Typo.body1">
+                                            <strong>✓ Fingerprint Enrolled Successfully!</strong><br/>
+                                            Your fingerprint ID: <strong>@_enrolledFingerprintId</strong>
+                                        </MudText>
+                                    </MudAlert>
+                                    <MudText Typo="Typo.body2" Style="opacity: 0.9;">
+                                        Remember: You'll need the same finger to unlock when retrieving your device.
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+
+                    <!-- Start Button -->
+                    <MudButton 
+                        Variant="Variant.Filled" 
+                        Color="Color.Success" 
+                        Size="Size.Large"
+                        FullWidth="true"
+                        StartIcon="@Icons.Material.Filled.PlayArrow"
+                        OnClick="StartCharging"
+                        Disabled="@(!CanStartCharging())"
+                        Style="padding: 15px; font-size: 1.2rem;">
+                        Start Charging
+                    </MudButton>
+                }
+                else if (_isCharging)
+                {
+                    <!-- Charging Info -->
+                    <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                        <MudStack Row="false" Spacing="3" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@Icons.Material.Filled.BatteryChargingFull" Size="Size.Large" Style="font-size: 80px; animation: pulse 2s infinite;" />
+                            <MudText Typo="Typo.h5" Style="font-weight: bold;">Charging in Progress...</MudText>
+                            
+                            <!-- Real-time Duration Display -->
+                            <MudGrid Spacing="2" Style="width: 100%;">
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Elevation="4" Class="pa-3" Style="background: rgba(255,255,255,0.2); border-radius: 10px;">
+                                        <MudStack Row="false" Spacing="1" AlignItems="AlignItems.Center">
+                                            <MudText Typo="Typo.body2" Style="opacity: 0.9;">Elapsed Time</MudText>
+                                            <MudText Typo="Typo.h3" Style="font-weight: bold; font-family: 'Courier New', monospace; letter-spacing: 2px;">
+                                                @_chargingDuration
+                                            </MudText>
+                                        </MudStack>
+                                    </MudPaper>
+                                </MudItem>
+                                <MudItem xs="12" md="6">
+                                    <MudPaper Elevation="4" Class="pa-3" Style="background: rgba(255,255,255,0.2); border-radius: 10px;">
+                                        <MudStack Row="false" Spacing="1" AlignItems="AlignItems.Center">
+                                            <MudText Typo="Typo.body2" Style="opacity: 0.9;">Time Remaining</MudText>
+                                            <MudText Typo="Typo.h3" Style="@GetTimeRemainingStyle()">
+                                                @_timeRemaining
+                                            </MudText>
+                                        </MudStack>
+                                    </MudPaper>
+                                </MudItem>
+                            </MudGrid>
+                            
+                            <!-- Session Info -->
+                            <MudGrid Spacing="2" Style="width: 100%;">
+                                <MudItem xs="6">
+                                    <MudPaper Elevation="2" Class="pa-2" Style="background: rgba(255,255,255,0.15); text-align: center;">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.8;">Start Time</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: bold;">
+                                            @(_slot.StartTime?.ToString("hh:mm:ss tt") ?? "--:--:--")
+                                        </MudText>
+                                    </MudPaper>
+                                </MudItem>
+                                <MudItem xs="6">
+                                    <MudPaper Elevation="2" Class="pa-2" Style="background: rgba(255,255,255,0.15); text-align: center;">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.8;">Current Time</MudText>
+                                        <MudText Typo="Typo.body1" Style="font-weight: bold;">
+                                            @_currentTime
+                                        </MudText>
+                                    </MudPaper>
+                                </MudItem>
+                                <MudItem xs="12">
+                                    <MudPaper Elevation="2" Class="pa-2" Style="background: rgba(255,255,255,0.15); text-align: center;">
+                                        <MudText Typo="Typo.caption" Style="opacity: 0.8;">Amount Paid</MudText>
+                                        <MudText Typo="Typo.h6" Style="font-weight: bold;">
+                                            ₱@_slot.CoinsInserted.ToString("0.00")
+                                        </MudText>
+                                    </MudPaper>
+                                </MudItem>
+                            </MudGrid>
+                        </MudStack>
+                    </MudPaper>
+
+                    @if (_slot.Status == SlotStatus.Sanitizing)
+                    {
+                        <MudAlert Severity="Severity.Info" Variant="Variant.Filled">
+                            <MudText Typo="Typo.body1">
+                                <MudProgressCircular Color="Color.Default" Size="Size.Small" Indeterminate="true" Style="margin-right: 10px;" />
+                                UV Sanitization in progress... (@_sanitizationCountdown seconds remaining)
+                            </MudText>
+                        </MudAlert>
+                    }
+
+                    @if (_slot.IsLocked)
+                    {
+                        <MudPaper Elevation="3" Class="pa-4" Style="background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%); color: white;">
+                            <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
+                                <MudIcon Icon="@Icons.Material.Filled.Lock" Size="Size.Large" Style="font-size: 60px;" />
+                                <MudText Typo="Typo.h6" Style="font-weight: bold;">Slot is Securely Locked</MudText>
+                                <MudText Typo="Typo.body2" Style="opacity: 0.9;">
+                                    Your device is safe. Scan your fingerprint when ready to retrieve.
+                                </MudText>
+                                @if (_slot.FingerprintId.HasValue)
+                                {
+                                    <MudChip T="string" Icon="@Icons.Material.Filled.Fingerprint" Color="Color.Default" Text="@($"Fingerprint ID: {_slot.FingerprintId}")" Style="background: rgba(255,255,255,0.2);" />
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+
+                    <!-- Unlock/Stop Section -->
+                    @if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+                    {
+                        <!-- Fingerprint Unlock -->
+                        <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
+                            <MudText Typo="Typo.h6" Class="mb-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Fingerprint" /> Unlock Slot
+                            </MudText>
+                            <MudStack Row="false" Spacing="2">
+                                @if (!_isUnlocking)
+                                {
+                                    <MudAlert Severity="Severity.Info" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;">
+                                        <MudText Typo="Typo.body2">
+                                            <strong>To retrieve your device:</strong> Place the same finger you used to enroll on the sensor.
+                                        </MudText>
+                                    </MudAlert>
+                                    <MudButton 
+                                        Variant="Variant.Filled" 
+                                        Color="Color.Success"
+                                        Size="Size.Large"
+                                        FullWidth="true"
+                                        StartIcon="@Icons.Material.Filled.Fingerprint"
+                                        OnClick="InitiateUnlock"
+                                        Style="background: white; color: #667eea; padding: 15px; font-size: 1.2rem;">
+                                        Scan Fingerprint to Unlock
+                                    </MudButton>
+                                }
+                                else
+                                {
+                                    <MudAlert Severity="Severity.Warning" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;">
+                                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                            <MudProgressCircular Color="Color.Default" Size="Size.Small" Indeterminate="true" />
+                                            <MudText Typo="Typo.body1">
+                                                <strong>Place your finger on the sensor...</strong>
+                                            </MudText>
+                                        </MudStack>
+                                    </MudAlert>
+                                    
+                                    @if (_unlockProgress > 0)
+                                    {
+                                        <MudProgressLinear Color="Color.Success" Value="_unlockProgress" Size="Size.Large" Class="mt-2">
+                                            <MudText Typo="Typo.body2">@_unlockMessage</MudText>
+                                        </MudProgressLinear>
+                                    }
+                                }
+                            </MudStack>
+                        </MudPaper>
+                    }
+                    else
+                    {
+                        <!-- Simple Stop for Open Slots -->
+                        <MudButton 
+                            Variant="Variant.Filled" 
+                            Color="Color.Error" 
+                            Size="Size.Large"
+                            FullWidth="true"
+                            StartIcon="@Icons.Material.Filled.Stop"
+                            OnClick="StopChargingDirect"
+                            Style="padding: 15px; font-size: 1.2rem;">
+                            Stop Charging
+                        </MudButton>
+                    }
+                }
+            </MudStack>
+        </MudPaper>
+    }
+    else
+    {
+        <MudPaper Elevation="4" Class="pa-6 text-center">
+            <MudText Typo="Typo.h5" Color="Color.Error">Slot not found</MudText>
+            <MudButton Variant="Variant.Filled" Color="Color.Primary" Href="/slots" Class="mt-4">
+                Back to Slots
+            </MudButton>
+        </MudPaper>
+    }
+</MudContainer>
+
+<style>
+    @@keyframes pulse {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.5; }
+    }
+    
+    @@keyframes coinPop {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.2); }
+        100% { transform: scale(1); }
+    }
+    
+    .coin-icon {
+        animation: pulse 2s infinite;
+    }
+    
+    .amount-display {
+        transition: all 0.3s ease;
+    }
+    
+    .amount-display.coin-inserted {
+        animation: coinPop 0.5s ease;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public int SlotNumber { get; set; }
+
+    private ChargingSlot? _slot;
+    private decimal _coinsInserted = 0;
+    private int _allocatedMinutes = 0;
+    private bool _fingerprintEnrolled = false;
+    private int _enrolledFingerprintId = 0;
+    private bool _isEnrolling = false;
+    private int _enrollmentStep = 0;
+    private int _enrollmentProgress = 0;
+    private string _enrollmentMessage = "";
+    private bool _isUnlocking = false;
+    private int _unlockProgress = 0;
+    private string _unlockMessage = "";
+    private bool _isCharging = false;
+    private Timer? _timer;
+    private Timer? _coinListenerTimer;
+    private bool _isCoinListenerActive = false;
+    private string _chargingDuration = "00:00:00";
+    private string _timeRemaining = "00:00:00";
+    private int _timeRemainingMinutes = 0;
+    private string _currentTime = DateTime.Now.ToString("hh:mm:ss tt");
+    private int _sanitizationCountdown = 15;
+    private List<CoinDenomination> _denominations = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _slot = SlotService.GetSlot(SlotNumber);
+            _isCharging = _slot.Status == SlotStatus.InUse || _slot.Status == SlotStatus.Locked || _slot.Status == SlotStatus.Sanitizing;
+            _denominations = await CoinService.GetAllDenominationsAsync();
+
+            if (_slot.FingerprintId.HasValue)
+            {
+                _enrolledFingerprintId = (int)_slot.FingerprintId;
+            }
+            
+            if (_isCharging && _slot.StartTime.HasValue)
+            {
+                _allocatedMinutes = _slot.ChargingMinutesAllocated;
+                StartTimer();
+            }
+            else if (_slot.Status == SlotStatus.Available)
+            {
+                // Auto-start coin listener when slot is available
+                StartCoinListener();
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error loading slot: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void StartCoinListener()
+    {
+        if (_isCoinListenerActive) return;
+        
+        _isCoinListenerActive = true;
+        Snackbar.Add("Coin acceptor activated! Please insert coins...", Severity.Info);
+        
+        // Poll coin slot API every 500ms for real-time detection
+        _coinListenerTimer = new Timer(async _ =>
+        {
+            if (!_isCoinListenerActive || _isCharging)
+            {
+                StopCoinListener();
+                return;
+            }
+            
+            try
+            {
+                var coinValue = await ArduinoService.GetCoinSlotValueAsync();
+                
+                if (coinValue > 0)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        _coinsInserted += coinValue;
+                        
+                        // Calculate total charging minutes
+                        _allocatedMinutes = await CoinService.GetChargingMinutesForAmountAsync(_coinsInserted);
+                        
+                        var coinDenom = _denominations.FirstOrDefault(d => d.Value == coinValue);
+                        var minutesAdded = coinDenom?.ChargingMinutes ?? 0;
+                        
+                        // Visual and audio feedback
+                        Snackbar.Add($"💰 ₱{coinValue:0.00} inserted! +{minutesAdded} minutes", Severity.Success);
+                        
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError(ex, "Error reading coin slot");
+            }
+        }, null, 0, 2000); // Check every 500ms
+    }
+    
+    private void StopCoinListener()
+    {
+        if (!_isCoinListenerActive) return;
+        
+        _isCoinListenerActive = false;
+        _coinListenerTimer?.Dispose();
+        _coinListenerTimer = null;
+        
+        if (_coinsInserted > 0)
+        {
+            Snackbar.Add($"Total: ₱{_coinsInserted:0.00} = {_allocatedMinutes} minutes", Severity.Info);
+        }
+    }
+    
+    private async Task SimulateCoinInsert()
+    {
+        // Manual simulation for testing (when coin acceptor not available)
+        decimal coinValue = 5; // Simulate ₱5 coin
+        
+        _coinsInserted += coinValue;
+        
+        // Calculate total charging minutes
+        _allocatedMinutes = await CoinService.GetChargingMinutesForAmountAsync(_coinsInserted);
+        
+        var coinDenom = _denominations.FirstOrDefault(d => d.Value == coinValue);
+        var minutesAdded = coinDenom?.ChargingMinutes ?? 0;
+        
+        Snackbar.Add($"💰 ₱{coinValue:0.00} inserted! +{minutesAdded} minutes", Severity.Success);
+    }
+
+    private async Task EnrollFingerprint()
+    {
+        if (_isEnrolling) return;
+        
+        _isEnrolling = true;
+        _enrollmentStep = 1;
+        _enrollmentProgress = 0;
+        _enrollmentMessage = "Initializing...";
+        
+        try
+        {
+            // Generate unique fingerprint ID for this slot
+            _enrolledFingerprintId = SlotNumber * 10 + new Random().Next(1, 10);
+            
+            // Step 1: First scan
+            _enrollmentMessage = "Place your finger on the sensor...";
+            _enrollmentProgress = 20;
+            Snackbar.Add("Step 1: Place your finger on the sensor", Severity.Info);
+            await Task.Delay(2000);
+            
+            // Step 2: Remove finger
+            _enrollmentMessage = "Remove your finger...";
+            _enrollmentProgress = 40;
+            Snackbar.Add("Step 2: Remove your finger", Severity.Info);
+            await Task.Delay(1500);
+            
+            // Step 3: Second scan
+            _enrollmentMessage = "Place the SAME finger again...";
+            _enrollmentProgress = 60;
+            Snackbar.Add("Step 3: Place the same finger again", Severity.Info);
+            await Task.Delay(2000);
+            
+            // Step 4: Processing
+            _enrollmentMessage = "Processing fingerprint template...";
+            _enrollmentProgress = 80;
+            await Task.Delay(1000);
+            
+            // Call actual enrollment via Arduino API
+            // In production, this enrolls the fingerprint to the sensor
+            var success = await EnrollFingerprintToSensor(_enrolledFingerprintId);
+            
+            if (success)
+            {
+                _enrollmentMessage = "Enrollment completed!";
+                _enrollmentProgress = 100;
+                _fingerprintEnrolled = true;
+                Snackbar.Add($"Fingerprint enrolled successfully! ID: {_enrolledFingerprintId}", Severity.Success);
+            }
+            else
+            {
+                throw new Exception("Fingerprint enrollment failed");
+            }
+        }
+        catch (Exception ex)
+        {
+            _enrollmentStep = 0;
+            _enrollmentProgress = 0;
+            Snackbar.Add($"Enrollment failed: {ex.Message}. Please try again.", Severity.Error);
+        }
+        finally
+        {
+            _isEnrolling = false;
+        }
+    }
+
+    private async Task<bool> EnrollFingerprintToSensor(int fingerprintId)
+    {
+        // Call Arduino API to enroll fingerprint on AS608 sensor
+        try
+        {
+            var success = await ArduinoService.EnrollFingerprintAsync(fingerprintId);
+            return success;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, $"Failed to enroll fingerprint {fingerprintId}");
+            return false;
+        }
+    }
+
+    private async Task StartCharging()
+    {
+        if (_slot == null || !CanStartCharging())
+            return;
+
+        // Stop listening for coins
+        StopCoinListener();
+
+        try
+        {
+            int? fingerprintId = _fingerprintEnrolled ? _enrolledFingerprintId : null;
+            
+            // Set charging minutes for the slot
+            SlotService.SetChargingMinutes(SlotNumber, _allocatedMinutes);
+            
+            var success = await SlotService.StartChargingAsync(SlotNumber, _coinsInserted, fingerprintId);
+            
+            if (success)
+            {
+                _isCharging = true;
+                StartTimer();
+                Snackbar.Add($"Charging started! {_allocatedMinutes} minutes allocated.", Severity.Success);
+                
+                // Handle UV sanitization countdown
+                if (_slot.Type == SlotType.Phone)
+                {
+                    StartSanitizationCountdown();
+                }
+            }
+            else
+            {
+                Snackbar.Add("Failed to start charging. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task InitiateUnlock()
+    {
+        if (_slot == null || _isUnlocking) return;
+        
+        _isUnlocking = true;
+        _unlockProgress = 0;
+        _unlockMessage = "Initializing fingerprint scanner...";
+        
+        try
+        {
+            // Step 1: Initialize
+            _unlockProgress = 20;
+            _unlockMessage = "Place your finger on the sensor...";
+            Snackbar.Add("Step 1: Place your enrolled finger on the sensor", Severity.Info);
+            StateHasChanged();
+            
+            await Task.Delay(1000);
+            
+            // Step 2: Scanning
+            _unlockProgress = 50;
+            _unlockMessage = "Scanning fingerprint...";
+            Snackbar.Add("Scanning...", Severity.Info);
+            StateHasChanged();
+            
+            // Verify fingerprint matches the enrolled one
+            var verified = await VerifyFingerprintForUnlock(_enrolledFingerprintId);
+            
+            if (!verified)
+            {
+                _unlockProgress = 0;
+                _unlockMessage = "";
+                _isUnlocking = false;
+                Snackbar.Add("❌ Fingerprint does not match! Access denied.", Severity.Error);
+                return;
+            }
+            
+            // Step 3: Verified
+            _unlockProgress = 80;
+            _unlockMessage = "Fingerprint verified! Unlocking...";
+            Snackbar.Add("✓ Fingerprint verified! Unlocking slot...", Severity.Success);
+            StateHasChanged();
+            
+            await Task.Delay(1000);
+            
+            // Step 4: Unlock
+            _unlockProgress = 100;
+            _unlockMessage = "Unlocking complete!";
+            StateHasChanged();
+            
+            await Task.Delay(500);
+            
+            // Proceed to stop charging
+            await StopChargingAfterVerification();
+        }
+        catch (Exception ex)
+        {
+            _unlockProgress = 0;
+            _unlockMessage = "";
+            _isUnlocking = false;
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task<bool> VerifyFingerprintForUnlock(int expectedFingerprintId)
+    {
+        try
+        {
+            // Call actual fingerprint verification via Arduino API
+            var verified = await SlotService.VerifyFingerprintAsync(expectedFingerprintId);
+            
+            Logger.LogInformation($"Fingerprint verification for unlock - Expected ID: {expectedFingerprintId}, Result: {verified}");
+            
+            return verified;
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error verifying fingerprint for unlock");
+            return false;
+        }
+    }
+
+    private async Task StopChargingAfterVerification()
+    {
+        if (_slot == null)
+            return;
+
+        try
+        {
+            var success = await SlotService.StopChargingAsync(SlotNumber);
+            
+            if (success)
+            {
+                _isCharging = false;
+                _isUnlocking = false;
+                _coinsInserted = 0;
+                _fingerprintEnrolled = false;
+                _enrolledFingerprintId = 0;
+                StopTimer();
+                Snackbar.Add("✓ Charging stopped. Door unlocked. Thank you!", Severity.Success);
+                
+                await Task.Delay(2000);
+                Navigation.NavigateTo("/slots");
+            }
+            else
+            {
+                _isUnlocking = false;
+                Snackbar.Add("Failed to unlock. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            _isUnlocking = false;
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private async Task StopChargingDirect()
+    {
+        // For open slots without fingerprint
+        if (_slot == null)
+            return;
+
+        try
+        {
+            var success = await SlotService.StopChargingAsync(SlotNumber);
+            
+            if (success)
+            {
+                _isCharging = false;
+                _coinsInserted = 0;
+                StopTimer();
+                Snackbar.Add("Charging stopped. Thank you!", Severity.Success);
+                
+                await Task.Delay(2000);
+                Navigation.NavigateTo("/slots");
+            }
+            else
+            {
+                Snackbar.Add("Failed to stop charging. Please try again.", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private bool CanStartCharging()
+    {
+        if (_slot == null || _coinsInserted <= 0)
+            return false;
+
+        if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+        {
+            return _fingerprintEnrolled;
+        }
+
+        return true;
+    }
+
+    private void StartTimer()
+    {
+        _timer = new Timer(async _ =>
+        {
+            if (_slot?.StartTime != null)
+            {
+                var now = DateTime.Now;
+                var elapsed = now - _slot.StartTime.Value;
+                _chargingDuration = $"{elapsed:hh\\:mm\\:ss}";
+                _currentTime = now.ToString("hh:mm:ss tt");
+                
+                // Calculate time remaining
+                var totalSeconds = _allocatedMinutes * 60;
+                var elapsedSeconds = (int)elapsed.TotalSeconds;
+                var remainingSeconds = Math.Max(0, totalSeconds - elapsedSeconds);
+                _timeRemainingMinutes = remainingSeconds / 60;
+                
+                var remainingTime = TimeSpan.FromSeconds(remainingSeconds);
+                _timeRemaining = $"{remainingTime:hh\\:mm\\:ss}";
+                
+                // Auto-stop when time runs out
+                if (remainingSeconds <= 0 && _isCharging)
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        Snackbar.Add("Charging time expired. Stopping charging...", Severity.Warning);
+                        
+                        // For secured slots, force unlock without fingerprint on timeout
+                        if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+                        {
+                            await StopChargingAfterVerification();
+                        }
+                        else
+                        {
+                            await StopChargingDirect();
+                        }
+                    });
+                }
+                
+                await InvokeAsync(StateHasChanged);
+            }
+        }, null, 0, 1000);
+    }
+
+    private void StopTimer()
+    {
+        _timer?.Dispose();
+        _timer = null;
+    }
+
+    private void StartSanitizationCountdown()
+    {
+        _sanitizationCountdown = 15;
+        var countdownTimer = new Timer(_ =>
+        {
+            _sanitizationCountdown--;
+            if (_sanitizationCountdown <= 0)
+            {
+                InvokeAsync(StateHasChanged);
+            }
+            else
+            {
+                InvokeAsync(StateHasChanged);
+            }
+        }, null, 0, 1000);
+    }
+
+    private Severity GetAlertSeverity(SlotStatus status)
+    {
+        return status switch
+        {
+            SlotStatus.Available => Severity.Success,
+            SlotStatus.InUse => Severity.Warning,
+            SlotStatus.Sanitizing => Severity.Info,
+            SlotStatus.Locked => Severity.Normal,
+            SlotStatus.OutOfService => Severity.Error,
+            _ => Severity.Normal
+        };
+    }
+
+    private string GetTimeRemainingStyle()
+    {
+        var color = _timeRemainingMinutes < 5 ? "#ff6b6b" : "white";
+        return $"font-weight: bold; font-family: 'Courier New', monospace; letter-spacing: 2px; color: {color};";
+    }
+
+    public void Dispose()
+    {
+        StopTimer();
+        StopCoinListener();
+    }
+}
+

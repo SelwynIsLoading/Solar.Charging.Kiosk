@@ -11,19 +11,16 @@
 <PageTitle>Confirm email</PageTitle>
 
 <h1>Confirm email</h1>
-<StatusMessage Message="@statusMessage" />
+<StatusMessage Message="@statusMessage"/>
 
 @code {
     private string? statusMessage;
 
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = default!;
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
 
-    [SupplyParameterFromQuery]
-    private string? UserId { get; set; }
+    [SupplyParameterFromQuery] private string? UserId { get; set; }
 
-    [SupplyParameterFromQuery]
-    private string? Code { get; set; }
+    [SupplyParameterFromQuery] private string? Code { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -45,4 +42,5 @@
             statusMessage = result.Succeeded ? "Thank you for confirming your email." : "Error confirming your email.";
         }
     }
+
 }

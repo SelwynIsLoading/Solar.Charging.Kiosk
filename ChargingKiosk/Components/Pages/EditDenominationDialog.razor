@@ -1,0 +1,128 @@
+@using ChargingKiosk.Models
+
+<MudDialog>
+    <DialogContent>
+        <MudForm @ref="_form" @bind-IsValid="@_isValid">
+            <MudStack Spacing="3">
+                <!-- Name Field -->
+                <MudTextField @bind-Value="Denomination.Name"
+                              Label="Coin Name"
+                              Required="true"
+                              RequiredError="Name is required"
+                              Variant="Variant.Outlined"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Label" />
+
+                <!-- Value Field -->
+                <MudNumericField @bind-Value="Denomination.Value"
+                                 Label="Coin Value (₱)"
+                                 Required="true"
+                                 RequiredError="Value is required"
+                                 Min="0.01m"
+                                 Step="0.01m"
+                                 Variant="Variant.Outlined"
+                                 Adornment="Adornment.Start"
+                                 AdornmentIcon="@Icons.Material.Filled.Paid"
+                                 Format="N2" />
+
+                <!-- Charging Minutes Field -->
+                <MudNumericField @bind-Value="Denomination.ChargingMinutes"
+                                 Label="Charging Time (minutes)"
+                                 Required="true"
+                                 RequiredError="Charging time is required"
+                                 Min="1"
+                                 Step="1"
+                                 Variant="Variant.Outlined"
+                                 Adornment="Adornment.Start"
+                                 AdornmentIcon="@Icons.Material.Filled.Timer"
+                                 HelperText="How many minutes of charging this coin provides" />
+
+                <!-- Active Status -->
+                <MudSwitch @bind-Value="Denomination.IsActive"
+                           Label="Active"
+                           Color="Color.Success"
+                           UnCheckedColor="Color.Error">
+                    @(Denomination.IsActive ? "This denomination is active" : "This denomination is inactive")
+                </MudSwitch>
+
+                <!-- Preview Card -->
+                <MudPaper Elevation="2" Class="pa-3" Style="background: #f8f9fa;">
+                    <MudText Typo="Typo.subtitle2" Class="mb-2">Preview:</MudText>
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                        <MudChip T="string" 
+                                 Icon="@Icons.Material.Filled.Paid" 
+                                 Color="Color.Primary" 
+                                 Text="@Denomination.Name" />
+                        <MudIcon Icon="@Icons.Material.Filled.ArrowForward" Size="Size.Small" />
+                        <MudChip T="string" 
+                                 Icon="@Icons.Material.Filled.Timer" 
+                                 Color="Color.Success" 
+                                 Text="@($"{Denomination.ChargingMinutes} min")" />
+                    </MudStack>
+                    <MudText Typo="Typo.caption" Class="mt-2" Style="color: #666;">
+                        Rate: ₱@Denomination.Value.ToString("N2") = @Denomination.ChargingMinutes minutes
+                    </MudText>
+                </MudPaper>
+
+                <!-- Statistics (Read-only) -->
+                <MudDivider />
+                <MudText Typo="Typo.subtitle2" Class="mt-2">Usage Statistics:</MudText>
+                <MudGrid Spacing="2">
+                    <MudItem xs="4">
+                        <MudPaper Elevation="1" Class="pa-2" Style="text-align: center;">
+                            <MudText Typo="Typo.caption">Daily</MudText>
+                            <MudText Typo="Typo.h6">@Denomination.DailyCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudPaper Elevation="1" Class="pa-2" Style="text-align: center;">
+                            <MudText Typo="Typo.caption">Monthly</MudText>
+                            <MudText Typo="Typo.h6">@Denomination.MonthlyCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="4">
+                        <MudPaper Elevation="1" Class="pa-2" Style="text-align: center;">
+                            <MudText Typo="Typo.caption">Yearly</MudText>
+                            <MudText Typo="Typo.h6">@Denomination.YearlyCount</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+            </MudStack>
+        </MudForm>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancel</MudButton>
+        <MudButton OnClick="Submit" 
+                   Variant="Variant.Filled" 
+                   Color="Color.Primary" 
+                   Disabled="@(!_isValid)"
+                   StartIcon="@Icons.Material.Filled.Save">
+            Save Changes
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] 
+    IMudDialogInstance MudDialog { get; set; } = null!;
+
+    [Parameter]
+    public CoinDenomination Denomination { get; set; } = new();
+
+    private MudForm _form = null!;
+    private bool _isValid = false;
+
+    private void Cancel()
+    {
+        MudDialog.Cancel();
+    }
+
+    private void Submit()
+    {
+        if (_isValid)
+        {
+            MudDialog.Close(DialogResult.Ok(Denomination));
+        }
+    }
+}
+

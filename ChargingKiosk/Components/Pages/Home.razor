@@ -1,7 +1,48 @@
 ﻿@page "/"
+@inject NavigationManager Navigation
 
-<PageTitle>Home</PageTitle>
+<PageTitle>Welcome - Solar Charging Station</PageTitle>
 
-<h1>Hello, world!</h1>
+<MudContainer MaxWidth="MaxWidth.Large" Class="d-flex align-center justify-center" Style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+    <MudPaper Elevation="8" Class="pa-8 text-center" Style="border-radius: 20px; max-width: 600px; background: rgba(255,255,255,0.95);">
+        <MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Large" Color="Color.Warning" Style="font-size: 120px;" />
+        
+        <MudText Typo="Typo.h2" Class="mb-2" Style="font-weight: bold; color: #667eea;">
+            Welcome to
+        </MudText>
+        <MudText Typo="Typo.h3" Class="mb-4" Style="font-weight: bold; color: #764ba2;">
+            Solar Charging Station
+        </MudText>
+        
+        <MudDivider Class="my-4" />
+        
+        <MudText Typo="Typo.body1" Class="mb-6" Style="color: #666;">
+            Eco-friendly charging solutions for your devices. 
+            <br/>
+            Powered by renewable solar energy.
+        </MudText>
+        
+        <MudButton 
+            Variant="Variant.Filled" 
+            Color="Color.Primary" 
+            Size="Size.Large"
+            StartIcon="@Icons.Material.Filled.ArrowForward"
+            OnClick="@GoToSlots"
+            Style="padding: 15px 40px; border-radius: 30px; font-size: 1.2rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+            Continue
+        </MudButton>
+        
+        <MudStack Row="true" Spacing="4" Class="mt-6 justify-center">
+            <MudChip T="string" Icon="@Icons.Material.Filled.Security" Color="Color.Success" Text="Secure" />
+            <MudChip T="string" Icon="@Icons.Material.Filled.SolarPower" Color="Color.Success" Text="Eco-Friendly" />
+            <MudChip T="string" Icon="@Icons.Material.Filled.Speed" Color="Color.Success" Text="Fast Charging" />
+        </MudStack>
+    </MudPaper>
+</MudContainer>
 
-Welcome to your new app.
+@code {
+    private void GoToSlots()
+    {
+        Navigation.NavigateTo("/slots");
+    }
+}

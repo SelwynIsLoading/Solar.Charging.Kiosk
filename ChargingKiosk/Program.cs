@@ -4,12 +4,21 @@ using Microsoft.EntityFrameworkCore;
 using ChargingKiosk.Components;
 using ChargingKiosk.Components.Account;
 using ChargingKiosk.Data;
+using ChargingKiosk.Services;
+using MudBlazor.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure web root path
+builder.WebHost.UseWebRoot("wwwroot");
+builder.WebHost.UseContentRoot(Directory.GetCurrentDirectory());
 
 // Add services to the container.
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
+
+// Add MudBlazor services
+builder.Services.AddMudServices();
 
 builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
@@ -23,7 +32,8 @@ builder.Services.AddAuthentication(options =>
     })
     .AddIdentityCookies();
 
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ?? throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
+var connectionString = builder.Configuration.GetConnectionString("DefaultConnection") ??
+                       throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseSqlite(connectionString));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
@@ -35,7 +45,40 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
+// Register custom services
+builder.Services.AddHttpClient<IArduinoApiService, ArduinoApiService>();
+builder.Services.AddSingleton<ISlotService, SlotService>();
+builder.Services.AddScoped<IInventoryService, InventoryService>();
+builder.Services.AddScoped<ICoinService, CoinService>();
+
 var app = builder.Build();
+
+// Auto-migrate database on startup
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<ApplicationDbContext>();
+        
+        // Apply any pending migrations automatically
+        if (context.Database.GetPendingMigrations().Any())
+        {
+            Console.WriteLine("Applying pending database migrations...");
+            context.Database.Migrate();
+            Console.WriteLine("Database migrations applied successfully!");
+        }
+        else
+        {
+            Console.WriteLine("Database is up to date.");
+        }
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -51,10 +94,9 @@ else
 
 app.UseHttpsRedirection();
 
-
+app.UseStaticFiles();
 app.UseAntiforgery();
 
-app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
