@@ -15,45 +15,68 @@
 SoftwareSerial mySerial(10, 11); // RX (Pin 10), TX (Pin 11)
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
 
+// ⚠️ CONFIGURATION: Clear fingerprint database on startup
+// Set to true to clear all fingerprints when Arduino starts
+// Set to false for normal operation (keeps enrolled fingerprints)
+const bool CLEAR_DATABASE_ON_STARTUP = true;  // ⚠️ Change to true to clear database
+
 // Pin definitions for relays (slots 1-13)
-const int RELAY_PINS[] = {22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34};
+const int RELAY_PINS[] = {22, 23, 24, 25, 28, 31, 34, 37, 40, 43, 45, 47, 49};
 
 // Pin definitions for solenoids (slots 4-13)
-const int SOLENOID_PINS[] = {35, 36, 37, 38, 39, 40, 41, 42, 43, 44};
+const int SOLENOID_PINS[] = {26, 29, 32, 35, 38, 40, 41, 42, 44, 46, 48, 50};
 
 // Pin definitions for UV lights (slots 4-9)
-const int UV_LIGHT_PINS[] = {45, 46, 47, 48, 49, 50};
+const int UV_LIGHT_PINS[] = {27, 30, 33, 36, 39, 42};
 
 // Coin acceptor pin
 const int COIN_PIN = 2;
+
+// ===== HARDWARE CONFIGURATION =====
+// Change these values based on your specific hardware setup
+// If your relays/solenoids/UV lights work backwards, just swap HIGH and LOW
+
+// Relay configuration (slots 1-13)
+const int RELAY_ON = LOW;      // Change to LOW if your relays are active-low
+const int RELAY_OFF = HIGH;      // Change to HIGH if your relays are active-low
+
+// Solenoid lock configuration (slots 4-13)
+const int SOLENOID_LOCKED = HIGH;    // Change to LOW if your solenoids lock with LOW signal
+const int SOLENOID_UNLOCKED = LOW;   // Change to HIGH if your solenoids unlock with HIGH signal
+
+// UV light configuration (slots 4-9)
+const int UV_LIGHT_ON = LOW;   // Change to LOW if your UV lights turn on with LOW signal
+const int UV_LIGHT_OFF = HIGH;   // Change to HIGH if your UV lights turn off with HIGH signal
+// ===================================
 
 volatile int coinPulseCount = 0;
 float coinValue = 0.0;
 unsigned long coinDetectedTime = 0;
 bool coinProcessed = false;
+unsigned long lastCoinPulseTime = 0;
 
 void setup() {
   Serial.begin(9600);
   
   // Initialize relay pins
-  // ACTIVE HIGH (HIGH = ON, LOW = OFF)
+  // Use configuration constants for relay behavior
   for (int i = 0; i < 13; i++) {
     pinMode(RELAY_PINS[i], OUTPUT);
-    digitalWrite(RELAY_PINS[i], LOW);  // LOW = OFF (default state)
+    digitalWrite(RELAY_PINS[i], RELAY_OFF);  // Default state: OFF
   }
   
   // Initialize solenoid pins
-  // HIGH = locked, LOW = unlocked
+  // Use configuration constants for lock behavior
   for (int i = 0; i < 10; i++) {
     pinMode(SOLENOID_PINS[i], OUTPUT);
-    digitalWrite(SOLENOID_PINS[i], HIGH);  // HIGH = locked (default state)
+    digitalWrite(SOLENOID_PINS[i], SOLENOID_LOCKED);  // Default state: locked
   }
   
   // Initialize UV light pins
-  // HIGH = ON, LOW = OFF
+  // Use configuration constants for UV light behavior
   for (int i = 0; i < 6; i++) {
     pinMode(UV_LIGHT_PINS[i], OUTPUT);
-    digitalWrite(UV_LIGHT_PINS[i], LOW);  // LOW = OFF (default state)
+    digitalWrite(UV_LIGHT_PINS[i], UV_LIGHT_OFF);  // Default state: OFF
   }
   
   // Initialize coin acceptor
@@ -64,9 +87,22 @@ void setup() {
   // AS608 default baud rate: 57600
   // Can be changed to 9600, 19200, 38400, 57600, 115200 via AT commands
   finger.begin(57600);
+
+  //finger.setPassword(0x00000000);  // Reset to default
   
   if (finger.verifyPassword()) {
     Serial.println("{\"status\":\"AS608 Fingerprint sensor found and verified\"}");
+    
+    // ⚠️ Clear database if configured to do so
+    if (CLEAR_DATABASE_ON_STARTUP) {
+      Serial.println("{\"status\":\"⚠️ CLEARING FINGERPRINT DATABASE...\"}");
+      if (finger.emptyDatabase() == FINGERPRINT_OK) {
+        Serial.println("{\"status\":\"✓ Fingerprint database cleared successfully\"}");
+        Serial.println("{\"info\":\"All enrolled fingerprints have been deleted\"}");
+      } else {
+        Serial.println("{\"status\":\"✗ Failed to clear fingerprint database\"}");
+      }
+    }
     
     // Optional: Read sensor parameters
     finger.getTemplateCount();
@@ -74,6 +110,8 @@ void setup() {
       Serial.print("{\"status\":\"AS608 has ");
       Serial.print(finger.templateCount);
       Serial.println(" fingerprints enrolled\"}");
+    } else {
+      Serial.println("{\"status\":\"AS608 database is empty (no fingerprints enrolled)\"}");
     }
   } else {
     Serial.println("{\"status\":\"AS608 Fingerprint sensor not found or password incorrect\"}");
@@ -119,6 +157,10 @@ void processCommand(String jsonString) {
     handleFingerprintEnroll(data);
   } else if (command == "READ_COIN") {
     handleReadCoin();
+  } else if (command == "UNLOCK_TEMP") {
+    handleUnlockTemp(data);
+  } else if (command == "FINGERPRINT_DELETE") {
+    handleFingerprintDelete(data);
   } else {
     sendResponse(false, "Unknown command");
   }
@@ -129,8 +171,8 @@ void handleRelay(JsonObject data) {
   bool state = data["state"];
   
   if (slot >= 1 && slot <= 13) {
-    // ACTIVE HIGH: HIGH = ON, LOW = OFF
-    digitalWrite(RELAY_PINS[slot - 1], state ? HIGH : LOW);
+    // Use configuration constants for relay behavior
+    digitalWrite(RELAY_PINS[slot - 1], state ? RELAY_ON : RELAY_OFF);
     sendResponse(true, "Relay controlled");
   } else {
     sendResponse(false, "Invalid slot number");
@@ -140,12 +182,21 @@ void handleRelay(JsonObject data) {
 void handleSolenoid(JsonObject data) {
   int slot = data["slot"];
   bool lock = data["lock"];
+  int duration = data["duration"] | 0; // Get duration in seconds, default 0 (permanent)
   
   // Solenoids are for slots 4-13 (index 0-9)
   if (slot >= 4 && slot <= 13) {
-    // HIGH = locked, LOW = unlocked
-    digitalWrite(SOLENOID_PINS[slot - 4], lock ? HIGH : LOW);
-    sendResponse(true, "Solenoid controlled");
+    // Use configuration constants for lock/unlock behavior
+    digitalWrite(SOLENOID_PINS[slot - 4], lock ? SOLENOID_LOCKED : SOLENOID_UNLOCKED);
+    
+    // If duration is specified, wait and then return to locked state
+    if (duration > 0 && !lock) {
+      delay(duration * 1000); // Convert seconds to milliseconds
+      digitalWrite(SOLENOID_PINS[slot - 4], SOLENOID_LOCKED); // Return to locked state
+      sendResponse(true, "Solenoid timed unlock completed");
+    } else {
+      sendResponse(true, "Solenoid controlled");
+    }
   } else {
     sendResponse(false, "Invalid slot number for solenoid");
   }
@@ -157,7 +208,8 @@ void handleUVLight(JsonObject data) {
   
   // UV lights are for slots 4-9 (index 0-5)
   if (slot >= 4 && slot <= 9) {
-    digitalWrite(UV_LIGHT_PINS[slot - 4], state ? HIGH : LOW);
+    // Use configuration constants for UV light behavior
+    digitalWrite(UV_LIGHT_PINS[slot - 4], state ? UV_LIGHT_ON : UV_LIGHT_OFF);
     sendResponse(true, "UV light controlled");
   } else {
     sendResponse(false, "Invalid slot number for UV light");
@@ -263,6 +315,15 @@ void handleFingerprintEnroll(JsonObject data) {
   
   Serial.println("{\"status\":\"Starting AS608 fingerprint enrollment...\"}");
   
+  // Step 0: Delete existing fingerprint if it exists (auto-cleanup)
+  Serial.println("{\"status\":\"Checking for existing fingerprint...\"}");
+  uint8_t deleteResult = finger.deleteModel(fingerprintId);
+  if (deleteResult == FINGERPRINT_OK) {
+    Serial.println("{\"status\":\"Deleted existing fingerprint - ready for re-enrollment\"}");
+  } else {
+    Serial.println("{\"status\":\"No existing fingerprint found - proceeding with enrollment\"}");
+  }
+  
   // Step 1: Get first image
   Serial.println("{\"status\":\"Place finger on sensor\"}");
   
@@ -281,7 +342,16 @@ void handleFingerprintEnroll(JsonObject data) {
   // Convert image to template in slot 1
   p = finger.image2Tz(1);
   if (p != FINGERPRINT_OK) {
-    sendResponse(false, "Image conversion failed");
+    // Provide specific error message based on error code
+    if (p == FINGERPRINT_IMAGEMESS) {
+      sendResponse(false, "Image too messy - clean sensor and finger, press firmly");
+    } else if (p == FINGERPRINT_FEATUREFAIL) {
+      sendResponse(false, "No fingerprint features found - press harder, cover entire sensor");
+    } else if (p == FINGERPRINT_INVALIDIMAGE) {
+      sendResponse(false, "Invalid image - clean sensor and try again");
+    } else {
+      sendResponse(false, "Image conversion failed - ensure finger covers sensor completely");
+    }
     return;
   }
   
@@ -313,7 +383,16 @@ void handleFingerprintEnroll(JsonObject data) {
   // Convert image to template in slot 2
   p = finger.image2Tz(2);
   if (p != FINGERPRINT_OK) {
-    sendResponse(false, "Second image conversion failed");
+    // Provide specific error message based on error code
+    if (p == FINGERPRINT_IMAGEMESS) {
+      sendResponse(false, "Second image too messy - clean sensor and finger, press firmly");
+    } else if (p == FINGERPRINT_FEATUREFAIL) {
+      sendResponse(false, "No features in second scan - press harder, cover entire sensor");
+    } else if (p == FINGERPRINT_INVALIDIMAGE) {
+      sendResponse(false, "Second image invalid - clean sensor and try again");
+    } else {
+      sendResponse(false, "Second image conversion failed - ensure finger covers sensor completely");
+    }
     return;
   }
   
@@ -345,13 +424,27 @@ void handleFingerprintEnroll(JsonObject data) {
     serializeJson(doc, response);
     Serial.println(response);
   } else {
+    // Enhanced error messages with troubleshooting hints
+    StaticJsonDocument<150> doc;
+    doc["success"] = false;
+    doc["fingerprintId"] = fingerprintId;
+    
     if (p == FINGERPRINT_BADLOCATION) {
-      sendResponse(false, "Could not store in that location");
+      doc["error"] = "Invalid fingerprint ID location";
+      doc["message"] = "Use fingerprint ID between 1-127";
     } else if (p == FINGERPRINT_FLASHERR) {
-      sendResponse(false, "Error writing to flash memory");
+      doc["error"] = "Fingerprint ID already exists or flash memory error";
+      doc["message"] = "This slot was already taken. Try deleting it first or use a different ID.";
+      doc["hint"] = "Run enrollment again - auto-delete should fix this";
     } else {
-      sendResponse(false, "Failed to store fingerprint");
+      doc["error"] = "Failed to store fingerprint";
+      doc["message"] = "Unknown error during storage";
+      doc["errorCode"] = p;
     }
+    
+    String response;
+    serializeJson(doc, response);
+    Serial.println(response);
   }
 }
 
@@ -383,52 +476,110 @@ void handleReadCoin() {
 }
 
 void coinInterrupt() {
+  unsigned long currentTime = millis();
+  
+  // Debounce: ignore pulses within 10ms of each other (noise)
+  if (currentTime - lastCoinPulseTime < 10) {
+    return;
+  }
+  
   coinPulseCount++;
-  // Don't process immediately - wait for pulse train to complete
-  coinDetectedTime = millis();
+  lastCoinPulseTime = currentTime;
+  coinDetectedTime = currentTime;
 }
 
 void processCoinPulse() {
   unsigned long currentTime = millis();
   
-  // Only process if we have pulses AND enough time passed since last pulse (debounce)
-  if (coinPulseCount > 0 && (currentTime - coinDetectedTime > 200)) {
+  // Only process if we have pulses AND enough time passed since last pulse
+  // Wait 300ms after last pulse to ensure pulse train is complete
+  if (coinPulseCount > 0 && (currentTime - coinDetectedTime > 300)) {
     
     int pulses = coinPulseCount;
     float detectedValue = 0.0;
     
     // Different pulse counts for different denominations
     // Adjust based on your coin acceptor configuration
+    // Using ranges to handle slight variations in pulse counting
     if (pulses == 1) {
       detectedValue = 1.0;  // 1 Peso
     } else if (pulses >= 2 && pulses <= 6) {
-      detectedValue = 5.0;  // 5 Pesos (usually 5 pulses, allow range)
+      detectedValue = 5.0;  // 5 Pesos (typically 5 pulses)
     } else if (pulses >= 7 && pulses <= 12) {
-      detectedValue = 10.0; // 10 Pesos (usually 10 pulses)
+      detectedValue = 10.0; // 10 Pesos (typically 10 pulses)
     } else if (pulses >= 13 && pulses <= 22) {
-      detectedValue = 20.0; // 20 Pesos (usually 20 pulses)
+      detectedValue = 20.0; // 20 Pesos (typically 20 pulses)
     }
     
     if (detectedValue > 0) {
       coinValue = detectedValue;
       
-      // Send notification to serial
-      Serial.print("{\"coinDetected\":");
-      Serial.print(coinValue, 2);
-      Serial.print(",\"pulses\":");
-      Serial.print(pulses);
-      Serial.println("}");
+      // Send notification to serial with timestamp
+      StaticJsonDocument<128> doc;
+      doc["coinDetected"] = coinValue;
+      doc["pulses"] = pulses;
+      doc["timestamp"] = currentTime;
+      
+      String response;
+      serializeJson(doc, response);
+      Serial.println(response);
       
       coinDetectedTime = currentTime;
       coinProcessed = false; // Ready to be read by API
     } else {
-      // Unknown pulse count
-      Serial.print("{\"warning\":\"Unknown pulse count: ");
-      Serial.print(pulses);
-      Serial.println("\"}");
+      // Unknown pulse count - log for debugging
+      StaticJsonDocument<128> doc;
+      doc["warning"] = "Unknown pulse count";
+      doc["pulses"] = pulses;
+      doc["timestamp"] = currentTime;
+      
+      String response;
+      serializeJson(doc, response);
+      Serial.println(response);
     }
     
+    // Reset counter
     coinPulseCount = 0;
+  }
+}
+
+void handleUnlockTemp(JsonObject data) {
+  int slot = data["slot"];
+  
+  // Temporary unlock for slots 4-13 (pulse for 2 seconds to unlock)
+  if (slot >= 4 && slot <= 13) {
+    // Send unlock signal for 2 seconds using configuration constants
+    digitalWrite(SOLENOID_PINS[slot - 4], SOLENOID_UNLOCKED);
+    delay(2000);  // Hold unlock for 2 seconds
+    digitalWrite(SOLENOID_PINS[slot - 4], SOLENOID_LOCKED); // Re-lock
+    sendResponse(true, "Temporary unlock completed");
+  } else {
+    sendResponse(false, "Invalid slot number for solenoid");
+  }
+}
+
+void handleFingerprintDelete(JsonObject data) {
+  int fingerprintId = data["fingerprintId"];
+  
+  Serial.println("{\"status\":\"Deleting fingerprint from AS608 sensor...\"}");
+  
+  // Delete fingerprint from AS608 sensor memory
+  uint8_t p = finger.deleteModel(fingerprintId);
+  
+  if (p == FINGERPRINT_OK) {
+    // Success!
+    StaticJsonDocument<100> doc;
+    doc["success"] = true;
+    doc["message"] = "Fingerprint deleted successfully";
+    doc["fingerprintId"] = fingerprintId;
+    
+    String response;
+    serializeJson(doc, response);
+    Serial.println(response);
+  } else if (p == FINGERPRINT_DELETEFAIL) {
+    sendResponse(false, "Failed to delete fingerprint");
+  } else {
+    sendResponse(false, "Error deleting fingerprint from sensor");
   }
 }
 

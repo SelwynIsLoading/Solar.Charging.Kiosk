@@ -3,7 +3,17 @@
 
 <PageTitle>Welcome - Solar Charging Station</PageTitle>
 
-<MudContainer MaxWidth="MaxWidth.Large" Class="d-flex align-center justify-center" Style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);">
+<MudContainer MaxWidth="MaxWidth.Large" Class="d-flex align-center justify-center" Style="min-height: 100vh; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); position: relative;">
+    <!-- Admin Button (Top Right) -->
+    <MudButton 
+        Variant="Variant.Outlined" 
+        Color="Color.Default"
+        StartIcon="@Icons.Material.Filled.AdminPanelSettings"
+        Href="/admin"
+        Style="position: absolute; top: 20px; right: 20px; background: rgba(255,255,255,0.9); color: #667eea;">
+        Admin
+    </MudButton>
+    
     <MudPaper Elevation="8" Class="pa-8 text-center" Style="border-radius: 20px; max-width: 600px; background: rgba(255,255,255,0.95);">
         <MudIcon Icon="@Icons.Material.Filled.Bolt" Size="Size.Large" Color="Color.Warning" Style="font-size: 120px;" />
         

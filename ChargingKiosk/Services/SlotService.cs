@@ -6,11 +6,14 @@ public class SlotService : ISlotService
 {
     private readonly List<ChargingSlot> _slots;
     private readonly IArduinoApiService _arduinoService;
+    private readonly IInventoryService _inventoryService;
     private readonly ILogger<SlotService> _logger;
+    private readonly Dictionary<int, int> _slotTransactionIds = new(); // Track transaction IDs per slot
 
-    public SlotService(IArduinoApiService arduinoService, ILogger<SlotService> logger)
+    public SlotService(IArduinoApiService arduinoService, IInventoryService inventoryService, ILogger<SlotService> logger)
     {
         _arduinoService = arduinoService;
+        _inventoryService = inventoryService;
         _logger = logger;
         _slots = InitializeSlots();
     }
@@ -88,19 +91,47 @@ public class SlotService : ISlotService
         slot.StartTime = DateTime.Now;
         slot.Status = SlotStatus.InUse;
         
+        // ✅ CREATE AND SAVE TRANSACTION TO DATABASE
+        try
+        {
+            var transaction = new Transaction
+            {
+                SlotNumber = slotNumber,
+                SlotType = slot.Type,
+                StartTime = slot.StartTime.Value,
+                TotalAmount = coinsInserted,
+                FingerprintId = fingerprintId
+            };
+            
+            await _inventoryService.AddTransactionAsync(transaction);
+            
+            // Store transaction ID for later update
+            _slotTransactionIds[slotNumber] = transaction.Id;
+            
+            _logger.LogInformation($"💰 Transaction saved: Slot {slotNumber}, Amount: ₱{coinsInserted:F2}, Type: {slot.Type}");
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to save transaction for slot {slotNumber}");
+            // Continue with charging even if transaction save fails
+        }
+        
         // Turn on relay
         await ControlRelayAsync(slotNumber, true);
         
-        // For Phone slots, start UV sanitization
-        if (slot.Type == SlotType.Phone)
-        {
-            await StartUVSanitizationAsync(slotNumber);
-        }
-        
-        // Lock the slot if it's Phone or Laptop type
+        // Unlock the slot for 10 seconds, then auto-lock if it's Phone or Laptop type
         if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
-            await LockSlotAsync(slotNumber, true);
+            // Unlock for 10 seconds to allow user to place device, then auto-lock
+            await LockSlotAsync(slotNumber, false, 10);
+            _logger.LogInformation($"Slot {slotNumber} locked after 10-second device placement window");
+        }
+        
+        // For Phone slots, start UV sanitization AFTER solenoid is locked
+        if (slot.Type == SlotType.Phone)
+        {
+            _logger.LogInformation($"Starting UV sanitization for slot {slotNumber} now that device is secured");
+            await StartUVSanitizationAsync(slotNumber);
         }
         
         return true;
@@ -126,13 +157,31 @@ public class SlotService : ISlotService
         slot.Status = SlotStatus.Available;
         slot.FingerprintId = null;
         
+        // ✅ UPDATE TRANSACTION WITH END TIME IN DATABASE
+        try
+        {
+            if (_slotTransactionIds.TryGetValue(slotNumber, out int transactionId))
+            {
+                await _inventoryService.UpdateTransactionEndTimeAsync(transactionId, slot.EndTime.Value);
+                _slotTransactionIds.Remove(slotNumber);
+                
+                var duration = slot.EndTime.Value - (slot.StartTime ?? slot.EndTime.Value);
+                _logger.LogInformation($"✅ Transaction completed: Slot {slotNumber}, Duration: {duration:hh\\:mm\\:ss}");
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to update transaction end time for slot {slotNumber}");
+            // Continue with stopping charging even if transaction update fails
+        }
+        
         // Turn off relay
         await ControlRelayAsync(slotNumber, false);
         
-        // Unlock the slot
+        // Unlock the slot for 10 seconds to allow user to retrieve device, then auto-lock
         if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
-            await LockSlotAsync(slotNumber, false);
+            await LockSlotAsync(slotNumber, false, 10);
         }
         
         return true;
@@ -156,15 +205,22 @@ public class SlotService : ISlotService
         }
     }
 
-    public async Task<bool> LockSlotAsync(int slotNumber, bool lockState)
+    public async Task<bool> LockSlotAsync(int slotNumber, bool lockState, int durationSeconds = 0)
     {
         var slot = GetSlot(slotNumber);
         slot.IsLocked = lockState;
         
         try
         {
-            await _arduinoService.ControlSolenoidAsync(slotNumber, lockState);
-            _logger.LogInformation($"Slot {slotNumber} {(lockState ? "locked" : "unlocked")}");
+            await _arduinoService.ControlSolenoidAsync(slotNumber, lockState, durationSeconds);
+            if (durationSeconds > 0 && !lockState)
+            {
+                _logger.LogInformation($"Slot {slotNumber} unlocked for {durationSeconds} seconds, then auto-locking");
+            }
+            else
+            {
+                _logger.LogInformation($"Slot {slotNumber} {(lockState ? "locked" : "unlocked")}");
+            }
             return true;
         }
         catch (Exception ex)
@@ -216,6 +272,51 @@ public class SlotService : ISlotService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Fingerprint verification failed");
+            return false;
+        }
+    }
+
+    public async Task<bool> UnlockTemporaryAsync(int slotNumber, int fingerprintId)
+    {
+        var slot = GetSlot(slotNumber);
+        
+        // Only phone and laptop slots can be unlocked
+        if (slot.Type != SlotType.Phone && slot.Type != SlotType.Laptop)
+        {
+            _logger.LogWarning($"Slot {slotNumber} is not a secured slot type");
+            return false;
+        }
+        
+        // Verify the slot is in use and locked
+        if (slot.Status != SlotStatus.InUse && slot.Status != SlotStatus.Locked)
+        {
+            _logger.LogWarning($"Slot {slotNumber} is not in use");
+            return false;
+        }
+        
+        // Verify fingerprint matches
+        if (!slot.FingerprintId.HasValue || slot.FingerprintId.Value != fingerprintId)
+        {
+            _logger.LogWarning($"Fingerprint ID mismatch for slot {slotNumber}");
+            
+            // Still attempt verification with Arduino
+            var verified = await VerifyFingerprintAsync(fingerprintId);
+            if (!verified)
+            {
+                return false;
+            }
+        }
+        
+        try
+        {
+            // Send temporary unlock command (2-second pulse)
+            await _arduinoService.UnlockTemporaryAsync(slotNumber);
+            _logger.LogInformation($"Slot {slotNumber} temporarily unlocked for device access");
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to temporarily unlock slot {slotNumber}");
             return false;
         }
     }

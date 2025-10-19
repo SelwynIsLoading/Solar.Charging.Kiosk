@@ -35,14 +35,15 @@ public class ArduinoApiService : IArduinoApiService
         }
     }
 
-    public async Task<bool> ControlSolenoidAsync(int slotNumber, bool lockState)
+    public async Task<bool> ControlSolenoidAsync(int slotNumber, bool lockState, int durationSeconds = 0)
     {
         try
         {
             var response = await _httpClient.PostAsJsonAsync("/api/solenoid", new
             {
                 slotNumber,
-                locked = lockState
+                locked = lockState,
+                duration = durationSeconds
             });
             
             return response.IsSuccessStatusCode;
@@ -148,6 +149,26 @@ public class ArduinoApiService : IArduinoApiService
         {
             _logger.LogError(ex, "Failed to get coin slot value");
             return 0;
+        }
+    }
+
+    public async Task<bool> UnlockTemporaryAsync(int slotNumber)
+    {
+        try
+        {
+            _logger.LogInformation($"Temporary unlock for slot {slotNumber}");
+            
+            var response = await _httpClient.PostAsJsonAsync("/api/solenoid/unlock-temp", new
+            {
+                slotNumber
+            });
+            
+            return response.IsSuccessStatusCode;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"Failed to temporarily unlock slot {slotNumber}");
+            return false;
         }
     }
     

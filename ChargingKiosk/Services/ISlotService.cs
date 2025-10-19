@@ -9,9 +9,10 @@ public interface ISlotService
     Task<bool> StartChargingAsync(int slotNumber, decimal coinsInserted, int? fingerprintId = null);
     Task<bool> StopChargingAsync(int slotNumber);
     Task<bool> ControlRelayAsync(int slotNumber, bool turnOn);
-    Task<bool> LockSlotAsync(int slotNumber, bool lockState);
+    Task<bool> LockSlotAsync(int slotNumber, bool lockState, int durationSeconds = 0);
     Task<bool> StartUVSanitizationAsync(int slotNumber);
     Task<bool> VerifyFingerprintAsync(int fingerprintId);
+    Task<bool> UnlockTemporaryAsync(int slotNumber, int fingerprintId);
     void SetChargingMinutes(int slotNumber, int minutes);
 }
 
