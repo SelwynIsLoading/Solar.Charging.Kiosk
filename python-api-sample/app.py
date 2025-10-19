@@ -20,10 +20,50 @@ BAUD_RATE = 9600
 
 try:
     arduino = serial.Serial(ARDUINO_PORT, BAUD_RATE, timeout=1)
-    time.sleep(2)  # Wait for Arduino to initialize
+    print(f"\n{'='*60}")
+    print(f"ARDUINO CONNECTION")
+    print(f"{'='*60}")
     print(f"Connected to Arduino on {ARDUINO_PORT}")
+    print(f"Waiting for Arduino to initialize...\n")
+    
+    # Read Arduino startup messages for 3 seconds
+    startup_timeout = time.time() + 3
+    while time.time() < startup_timeout:
+        if arduino.in_waiting > 0:
+            try:
+                line = arduino.readline().decode('utf-8', errors='ignore').strip()
+                if line:
+                    # Try to parse as JSON for pretty printing
+                    try:
+                        data = json.loads(line)
+                        if 'status' in data:
+                            print(f"📟 Arduino: {data['status']}")
+                        elif 'info' in data:
+                            print(f"ℹ️  Info: {data['info']}")
+                        elif 'help' in data:
+                            print(f"💡 Help: {data['help']}")
+                        else:
+                            print(f"📟 Arduino: {line}")
+                    except json.JSONDecodeError:
+                        # Not JSON, just print it
+                        print(f"📟 Arduino: {line}")
+            except Exception as e:
+                pass  # Ignore decoding errors
+        time.sleep(0.1)
+    
+    print(f"{'='*60}")
+    print(f"✓ Arduino initialization complete!")
+    print(f"{'='*60}\n")
+    
 except Exception as e:
-    print(f"Warning: Could not connect to Arduino: {e}")
+    print(f"\n{'='*60}")
+    print(f"⚠️  WARNING: Could not connect to Arduino")
+    print(f"{'='*60}")
+    print(f"Error: {e}")
+    print(f"Port: {ARDUINO_PORT}")
+    print(f"\nThe API will run in SIMULATION mode.")
+    print(f"All hardware commands will be simulated (not secure!).")
+    print(f"{'='*60}\n")
     arduino = None
 
 def send_arduino_command(command, data, timeout=10):
@@ -166,12 +206,17 @@ def control_solenoid():
     data = request.json
     slot_number = data.get('slotNumber')
     lock_state = data.get('locked')
+    duration = data.get('duration', 0)  # Duration in seconds, default 0 (permanent)
     
-    print(f"Solenoid control - Slot {slot_number}: {'LOCK' if lock_state else 'UNLOCK'}")
+    if duration > 0:
+        print(f"Solenoid control - Slot {slot_number}: {'LOCK' if lock_state else 'UNLOCK'} for {duration} seconds")
+    else:
+        print(f"Solenoid control - Slot {slot_number}: {'LOCK' if lock_state else 'UNLOCK'}")
     
     result = send_arduino_command('SOLENOID', {
         'slot': slot_number,
-        'lock': lock_state
+        'lock': lock_state,
+        'duration': duration
     })
     
     return jsonify(result), 200 if result.get('success') else 500
@@ -201,17 +246,29 @@ def verify_fingerprint():
     data = request.json
     expected_id = data.get('fingerprintId')
     
-    print(f"\n=== Fingerprint Verification ===")
-    print(f"Expected ID: {expected_id}")
-    print("Waiting for finger scan...")
+    print(f"\n{'='*50}")
+    print(f"FINGERPRINT VERIFICATION REQUEST")
+    print(f"{'='*50}")
+    print(f"Expected Fingerprint ID: {expected_id}")
+    print(f"Request from: {request.remote_addr}")
+    print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("Waiting for finger scan on AS608 sensor...")
+    print(f"{'='*50}\n")
     
     result = send_arduino_command('FINGERPRINT_VERIFY', {
         'id': expected_id
-    })
+    }, timeout=10)
+    
+    print(f"\n{'='*50}")
+    print(f"ARDUINO RESPONSE")
+    print(f"{'='*50}")
+    print(f"Raw result: {result}")
+    print(f"{'='*50}\n")
     
     # Simulate successful verification for demo (when no Arduino connected)
     if result.get('simulated'):
-        print("⚠ Running in simulation mode (no Arduino)")
+        print("⚠ WARNING: Running in SIMULATION mode (no Arduino)")
+        print("⚠ Returning simulated success for testing")
         result['isValid'] = True
         result['fingerprintId'] = expected_id
         result['confidence'] = 95
@@ -219,17 +276,32 @@ def verify_fingerprint():
     is_valid = result.get('isValid', False)
     matched_id = result.get('fingerprintId', 0)
     confidence = result.get('confidence', 0)
+    error_msg = result.get('error', '')
+    
+    print(f"\n{'='*50}")
+    print(f"VERIFICATION RESULT")
+    print(f"{'='*50}")
     
     if is_valid:
-        print(f"✓ Match found! ID: {matched_id}, Confidence: {confidence}")
+        print(f"✓ SUCCESS: Fingerprint matched!")
+        print(f"  Matched ID: {matched_id}")
+        print(f"  Expected ID: {expected_id}")
+        print(f"  Confidence: {confidence}")
+        print(f"  Match: {'CORRECT' if matched_id == expected_id else 'WRONG FINGER'}")
     else:
-        print(f"✗ No match found or error: {result.get('error', 'Unknown')}")
-    print(f"=== Verification Complete ===\n")
+        print(f"✗ FAILED: Fingerprint not matched")
+        print(f"  Expected ID: {expected_id}")
+        print(f"  Error: {error_msg or 'No match found'}")
+        if 'matchedId' in result:
+            print(f"  Wrong finger detected - Matched ID: {result['matchedId']}")
+    
+    print(f"{'='*50}\n")
     
     return jsonify({
         'isValid': is_valid,
         'fingerprintId': matched_id,
-        'confidence': confidence
+        'confidence': confidence,
+        'error': error_msg
     }), 200
 
 @app.route('/api/coin-slot', methods=['GET'])
@@ -287,15 +359,27 @@ def enroll_fingerprint():
     data = request.json
     fingerprint_id = data.get('userId', data.get('fingerprintId', 1))
     
-    print(f"\n=== Starting AS608 Fingerprint Enrollment ===")
+    print(f"\n{'='*50}")
+    print(f"FINGERPRINT ENROLLMENT REQUEST")
+    print(f"{'='*50}")
     print(f"Fingerprint ID: {fingerprint_id}")
+    print(f"Request from: {request.remote_addr}")
+    print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print("Starting AS608 enrollment process...")
+    print(f"{'='*50}\n")
     
     result = send_arduino_command('FINGERPRINT_ENROLL', {
         'userId': fingerprint_id
-    })
+    }, timeout=30)  # Longer timeout for enrollment
+    
+    print(f"\n{'='*50}")
+    print(f"ENROLLMENT RESULT")
+    print(f"{'='*50}")
+    print(f"Raw result: {result}")
+    print(f"{'='*50}\n")
     
     if result.get('success'):
-        print(f"✓ Fingerprint {fingerprint_id} enrolled successfully!")
+        print(f"✓ SUCCESS: Fingerprint {fingerprint_id} enrolled!")
         print(f"=== Enrollment Complete ===\n")
         return jsonify({
             'success': True,
@@ -303,12 +387,23 @@ def enroll_fingerprint():
             'message': 'Fingerprint enrolled successfully'
         }), 200
     else:
-        print(f"✗ Enrollment failed: {result.get('message', 'Unknown error')}")
+        error_msg = result.get('message', result.get('error', 'Unknown error'))
+        hint = result.get('hint', '')
+        print(f"✗ FAILED: Enrollment unsuccessful")
+        print(f"  Error: {error_msg}")
+        if hint:
+            print(f"  Hint: {hint}")
         print(f"=== Enrollment Failed ===\n")
-        return jsonify({
+        
+        response_data = {
             'success': False,
-            'error': result.get('message', 'Enrollment failed')
-        }), 500
+            'error': error_msg,
+            'fingerprintId': fingerprint_id
+        }
+        if hint:
+            response_data['hint'] = hint
+        
+        return jsonify(response_data), 500
 
 @app.route('/health', methods=['GET'])
 def health_check():
@@ -318,8 +413,43 @@ def health_check():
         'arduino_connected': arduino is not None
     }), 200
 
+@app.route('/api/fingerprint/delete-all', methods=['POST'])
+def delete_all_fingerprints():
+    """Delete all fingerprints manually"""
+    print("\n⚠️ Attempting to delete all fingerprints...")
+    
+    # Delete fingerprints one by one (IDs 1-127)
+    deleted_count = 0
+    for fid in range(1, 128):
+        result = send_arduino_command('FINGERPRINT_DELETE', {
+            'fingerprintId': fid
+        })
+        if result.get('success'):
+            deleted_count += 1
+            print(f"✓ Deleted fingerprint ID {fid}")
+    
+    print(f"✓ Deleted {deleted_count} fingerprints total\n")
+    
+    return jsonify({
+        'success': True,
+        'deleted_count': deleted_count,
+        'message': f'Deleted {deleted_count} fingerprints'
+    }), 200
+
 if __name__ == '__main__':
-    print("Starting Solar Charging Station Python API...")
-    print(f"Arduino connection: {'Connected' if arduino else 'Simulated mode'}")
-    app.run(host='0.0.0.0', port=5000, debug=True)
+    print("\n" + "="*60)
+    print("SOLAR CHARGING STATION - Python API")
+    print("="*60)
+    print(f"Port: 8000")
+    print(f"Arduino: {'Connected ✓' if arduino else 'Simulated mode ⚠️'}")
+    print("="*60 + "\n")
+    
+    if arduino:
+        print("Ready to receive commands from Blazor app!")
+        print("Watch this terminal for real-time Arduino communication.\n")
+    else:
+        print("⚠️  Running in SIMULATION mode!")
+        print("Connect Arduino and restart for hardware control.\n")
+    
+    app.run(host='127.0.0.1', port=8000, debug=True)
 

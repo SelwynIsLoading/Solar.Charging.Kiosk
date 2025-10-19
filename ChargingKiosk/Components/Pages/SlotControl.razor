@@ -89,11 +89,6 @@
                             </MudButton>
                         }
                         
-                        <!-- Manual insert for testing -->
-                        <MudButton Variant="Variant.Text" Color="Color.Default" OnClick="SimulateCoinInsert" FullWidth="true" Class="mt-2" Style="color: rgba(255,255,255,0.7);">
-                            <MudIcon Icon="@Icons.Material.Filled.Add" /> Simulate Coin (Testing)
-                        </MudButton>
-                        
                         @if (_denominations.Any())
                         {
                             <MudDivider Class="my-3" Style="background: rgba(255,255,255,0.3);" />
@@ -456,11 +451,6 @@
             {
                 _allocatedMinutes = _slot.ChargingMinutesAllocated;
                 StartTimer();
-            }
-            else if (_slot.Status == SlotStatus.Available)
-            {
-                // Auto-start coin listener when slot is available
-                StartCoinListener();
             }
         }
         catch (Exception ex)

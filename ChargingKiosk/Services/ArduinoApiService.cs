@@ -35,14 +35,15 @@ public class ArduinoApiService : IArduinoApiService
         }
     }
 
-    public async Task<bool> ControlSolenoidAsync(int slotNumber, bool lockState)
+    public async Task<bool> ControlSolenoidAsync(int slotNumber, bool lockState, int durationSeconds = 0)
     {
         try
         {
             var response = await _httpClient.PostAsJsonAsync("/api/solenoid", new
             {
                 slotNumber,
-                locked = lockState
+                locked = lockState,
+                duration = durationSeconds
             });
             
             return response.IsSuccessStatusCode;

@@ -47,7 +47,7 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 // Register custom services
 builder.Services.AddHttpClient<IArduinoApiService, ArduinoApiService>();
-builder.Services.AddSingleton<ISlotService, SlotService>();
+builder.Services.AddScoped<ISlotService, SlotService>();
 builder.Services.AddScoped<IInventoryService, InventoryService>();
 builder.Services.AddScoped<ICoinService, CoinService>();
 

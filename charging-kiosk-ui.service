@@ -1,0 +1,22 @@
+[Unit]
+Description=Charging Kiosk Blazor UI
+After=network.target
+
+[Service]
+Type=simple
+User=solaradmin
+WorkingDirectory=/home/solaradmin/charging-kiosk/ui
+ExecStart=/home/solaradmin/charging-kiosk/ui/ChargingKiosk
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=charging-kiosk-ui
+
+# Environment variables
+Environment=ASPNETCORE_ENVIRONMENT=Production
+Environment=ASPNETCORE_URLS=http://0.0.0.0:5000
+
+[Install]
+WantedBy=multi-user.target
+

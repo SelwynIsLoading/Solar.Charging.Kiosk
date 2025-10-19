@@ -32,7 +32,7 @@
         {
             <MudItem xs="12" sm="6" md="4">
                 <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;" 
-                         Class="@(slot.Status == SlotStatus.Available ? "cursor-pointer hover-card" : "")"
+                         Class="cursor-pointer hover-card"
                          @onclick="@(() => SelectSlot(slot))">
                     <MudCardContent>
                         <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
@@ -66,7 +66,7 @@
         {
             <MudItem xs="12" sm="6" md="4" lg="3">
                 <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;" 
-                         Class="@(slot.Status == SlotStatus.Available ? "cursor-pointer hover-card" : "")"
+                         Class="cursor-pointer hover-card"
                          @onclick="@(() => SelectSlot(slot))">
                     <MudCardContent>
                         <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
@@ -102,7 +102,7 @@
         {
             <MudItem xs="12" sm="6" md="4" lg="3">
                 <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;" 
-                         Class="@(slot.Status == SlotStatus.Available ? "cursor-pointer hover-card" : "")"
+                         Class="cursor-pointer hover-card"
                          @onclick="@(() => SelectSlot(slot))">
                     <MudCardContent>
                         <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
@@ -158,9 +158,6 @@
 
     private void SelectSlot(ChargingSlot slot)
     {
-        if (slot.Status != SlotStatus.Available)
-            return;
-
         Navigation.NavigateTo($"/slot/{slot.SlotNumber}");
     }
 

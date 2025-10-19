@@ -119,16 +119,19 @@ public class SlotService : ISlotService
         // Turn on relay
         await ControlRelayAsync(slotNumber, true);
         
-        // For Phone slots, start UV sanitization
-        if (slot.Type == SlotType.Phone)
-        {
-            await StartUVSanitizationAsync(slotNumber);
-        }
-        
-        // Lock the slot if it's Phone or Laptop type
+        // Unlock the slot for 10 seconds, then auto-lock if it's Phone or Laptop type
         if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
-            await LockSlotAsync(slotNumber, true);
+            // Unlock for 10 seconds to allow user to place device, then auto-lock
+            await LockSlotAsync(slotNumber, false, 10);
+            _logger.LogInformation($"Slot {slotNumber} locked after 10-second device placement window");
+        }
+        
+        // For Phone slots, start UV sanitization AFTER solenoid is locked
+        if (slot.Type == SlotType.Phone)
+        {
+            _logger.LogInformation($"Starting UV sanitization for slot {slotNumber} now that device is secured");
+            await StartUVSanitizationAsync(slotNumber);
         }
         
         return true;
@@ -175,10 +178,10 @@ public class SlotService : ISlotService
         // Turn off relay
         await ControlRelayAsync(slotNumber, false);
         
-        // Unlock the slot
+        // Unlock the slot for 10 seconds to allow user to retrieve device, then auto-lock
         if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
-            await LockSlotAsync(slotNumber, false);
+            await LockSlotAsync(slotNumber, false, 10);
         }
         
         return true;
@@ -202,15 +205,22 @@ public class SlotService : ISlotService
         }
     }
 
-    public async Task<bool> LockSlotAsync(int slotNumber, bool lockState)
+    public async Task<bool> LockSlotAsync(int slotNumber, bool lockState, int durationSeconds = 0)
     {
         var slot = GetSlot(slotNumber);
         slot.IsLocked = lockState;
         
         try
         {
-            await _arduinoService.ControlSolenoidAsync(slotNumber, lockState);
-            _logger.LogInformation($"Slot {slotNumber} {(lockState ? "locked" : "unlocked")}");
+            await _arduinoService.ControlSolenoidAsync(slotNumber, lockState, durationSeconds);
+            if (durationSeconds > 0 && !lockState)
+            {
+                _logger.LogInformation($"Slot {slotNumber} unlocked for {durationSeconds} seconds, then auto-locking");
+            }
+            else
+            {
+                _logger.LogInformation($"Slot {slotNumber} {(lockState ? "locked" : "unlocked")}");
+            }
             return true;
         }
         catch (Exception ex)
