@@ -33,8 +33,19 @@ public class SlotService : ISlotService
             });
         }
         
-        // Slots 4-9: Phone (with fingerprint and UV)
-        for (int i = 4; i <= 9; i++)
+        // Slots 4-6: Secure (solenoid + fingerprint, no UV)
+        for (int i = 4; i <= 6; i++)
+        {
+            slots.Add(new ChargingSlot
+            {
+                SlotNumber = i,
+                Type = SlotType.Secure,
+                Status = SlotStatus.Available
+            });
+        }
+        
+        // Slots 7-12: Phone (with fingerprint and UV)
+        for (int i = 7; i <= 12; i++)
         {
             slots.Add(new ChargingSlot
             {
@@ -44,8 +55,8 @@ public class SlotService : ISlotService
             });
         }
         
-        // Slots 10-13: Laptop (with fingerprint, no UV)
-        for (int i = 10; i <= 13; i++)
+        // Slots 13-16: Laptop (with fingerprint, no UV)
+        for (int i = 13; i <= 16; i++)
         {
             slots.Add(new ChargingSlot
             {
@@ -81,7 +92,7 @@ public class SlotService : ISlotService
 
         // For Phone and Laptop slots, store the enrolled fingerprint ID
         // No verification needed here - fingerprint was just enrolled in the UI
-        if ((slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop) && fingerprintId.HasValue)
+        if ((slot.Type == SlotType.Secure || slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop) && fingerprintId.HasValue)
         {
             slot.FingerprintId = fingerprintId;
             _logger.LogInformation($"Slot {slotNumber} secured with fingerprint ID: {fingerprintId}");
@@ -120,7 +131,7 @@ public class SlotService : ISlotService
         await ControlRelayAsync(slotNumber, true);
         
         // Unlock the slot for 10 seconds, then auto-lock if it's Phone or Laptop type
-        if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
+        if (slot.Type == SlotType.Secure || slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
             // Unlock for 10 seconds to allow user to place device, then auto-lock
             await LockSlotAsync(slotNumber, false, 10);
@@ -179,7 +190,7 @@ public class SlotService : ISlotService
         await ControlRelayAsync(slotNumber, false);
         
         // Unlock the slot for 10 seconds to allow user to retrieve device, then auto-lock
-        if (slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
+        if (slot.Type == SlotType.Secure || slot.Type == SlotType.Phone || slot.Type == SlotType.Laptop)
         {
             await LockSlotAsync(slotNumber, false, 10);
         }
@@ -281,7 +292,7 @@ public class SlotService : ISlotService
         var slot = GetSlot(slotNumber);
         
         // Only phone and laptop slots can be unlocked
-        if (slot.Type != SlotType.Phone && slot.Type != SlotType.Laptop)
+        if (slot.Type != SlotType.Secure && slot.Type != SlotType.Phone && slot.Type != SlotType.Laptop)
         {
             _logger.LogWarning($"Slot {slotNumber} is not a secured slot type");
             return false;

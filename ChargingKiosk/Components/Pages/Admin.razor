@@ -4,6 +4,7 @@
 @inject IInventoryService InventoryService
 @inject ISnackbar Snackbar
 @inject IDialogService DialogService
+@inject IAdminSettingsService AdminSettings
 @attribute [Authorize]
 
 <PageTitle>Admin Panel - Solar Charging Station</PageTitle>
@@ -51,6 +52,26 @@
         </MudItem>
     </MudGrid>
 
+    <MudPaper Elevation="2" Class="pa-4 mb-4">
+        <MudText Typo="Typo.h5" Class="mb-3">
+            <MudIcon Icon="@Icons.Material.Filled.Tune" /> Maintenance & Testing
+        </MudText>
+        <MudStack Row="false" Spacing="2">
+            <MudSwitch T="bool" @bind-Value="_autoActivateCoinAcceptor"
+                       Color="Color.Primary"
+                       Label="Auto-activate coin acceptor on available slots" />
+            <MudSwitch T="bool" @bind-Value="_allowCoinBypass"
+                       Color="Color.Warning"
+                       Label="Allow coin bypass (start charging without coins)" />
+            <MudSwitch T="bool" @bind-Value="_enableCoinSimulation"
+                       Color="Color.Info"
+                       Label="Show coin simulation button on slot page" />
+        </MudStack>
+        <MudText Typo="Typo.caption" Class="mt-2" Style="color: #666;">
+            These options apply immediately across all kiosks. Use bypass and simulation only for testing or maintenance.
+        </MudText>
+    </MudPaper>
+
     <!-- Tabs for Different Sections -->
     <MudTabs Elevation="4" Rounded="true" Color="Color.Primary" Class="mb-4">
         <!-- Revenue Breakdown Tab -->
@@ -66,6 +87,10 @@
                                     <tr>
                                         <td><strong>Open Slots</strong></td>
                                         <td style="text-align: right;">₱@_dailyRevenue["Open Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Secure Slots</strong></td>
+                                        <td style="text-align: right;">₱@_dailyRevenue["Secure Slots"].ToString("N2")</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Phone Slots</strong></td>
@@ -93,6 +118,10 @@
                                         <td style="text-align: right;">₱@_monthlyRevenue["Open Slots"].ToString("N2")</td>
                                     </tr>
                                     <tr>
+                                        <td><strong>Secure Slots</strong></td>
+                                        <td style="text-align: right;">₱@_monthlyRevenue["Secure Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
                                         <td><strong>Phone Slots</strong></td>
                                         <td style="text-align: right;">₱@_monthlyRevenue["Phone Slots"].ToString("N2")</td>
                                     </tr>
@@ -116,6 +145,10 @@
                                     <tr>
                                         <td><strong>Open Slots</strong></td>
                                         <td style="text-align: right;">₱@_yearlyRevenue["Open Slots"].ToString("N2")</td>
+                                    </tr>
+                                    <tr>
+                                        <td><strong>Secure Slots</strong></td>
+                                        <td style="text-align: right;">₱@_yearlyRevenue["Secure Slots"].ToString("N2")</td>
                                     </tr>
                                     <tr>
                                         <td><strong>Phone Slots</strong></td>
@@ -218,6 +251,51 @@
     private List<CoinDenomination> _coinDenominations = new();
     private List<Transaction> _transactions = new();
 
+    private bool _autoActivateCoinAcceptor
+    {
+        get => AdminSettings.AutoActivateCoinAcceptor;
+        set
+        {
+            if (AdminSettings.AutoActivateCoinAcceptor != value)
+            {
+                AdminSettings.AutoActivateCoinAcceptor = value;
+                Snackbar.Add(value 
+                    ? "Coin acceptor will now auto-activate on available slots." 
+                    : "Auto-activation disabled. Operators must manually enable the coin acceptor.", Severity.Info);
+            }
+        }
+    }
+
+    private bool _allowCoinBypass
+    {
+        get => AdminSettings.AllowCoinBypass;
+        set
+        {
+            if (AdminSettings.AllowCoinBypass != value)
+            {
+                AdminSettings.AllowCoinBypass = value;
+                Snackbar.Add(value
+                    ? "Coin bypass enabled. Slots can start without coins."
+                    : "Coin bypass disabled. Coins are required before charging.", Severity.Warning);
+            }
+        }
+    }
+
+    private bool _enableCoinSimulation
+    {
+        get => AdminSettings.EnableCoinSimulationButton;
+        set
+        {
+            if (AdminSettings.EnableCoinSimulationButton != value)
+            {
+                AdminSettings.EnableCoinSimulationButton = value;
+                Snackbar.Add(value
+                    ? "Coin simulation button is now visible on slot control pages."
+                    : "Coin simulation button hidden from slot control pages.", Severity.Info);
+            }
+        }
+    }
+
     protected override async Task OnInitializedAsync()
     {
         await LoadData();
@@ -279,6 +357,7 @@
         return type switch
         {
             SlotType.Open => Color.Primary,
+            SlotType.Secure => Color.Info,
             SlotType.Phone => Color.Secondary,
             SlotType.Laptop => Color.Tertiary,
             _ => Color.Default

@@ -57,7 +57,42 @@
         }
     </MudGrid>
 
-    <!-- Phone Slots (4-9) -->
+    <!-- Secure Slots (4-6) -->
+    <MudText Typo="Typo.h5" Class="mb-3 mt-4" Style="font-weight: bold; color: #5a67d8;">
+        <MudIcon Icon="@Icons.Material.Filled.Security" /> Secure Slots (Locker)
+    </MudText>
+    <MudGrid Spacing="3" Class="mb-6">
+        @foreach (var slot in _slots.Where(s => s.Type == SlotType.Secure))
+        {
+            <MudItem xs="12" sm="6" md="4" lg="3">
+                <MudCard Elevation="4" Style="height: 100%; border-radius: 15px; transition: transform 0.2s;"
+                         Class="cursor-pointer hover-card"
+                         @onclick="@(() => SelectSlot(slot))">
+                    <MudCardContent>
+                        <MudStack Row="false" Spacing="2" AlignItems="AlignItems.Center">
+                            <MudIcon Icon="@slot.IconClass" Size="Size.Large" Color="Color.Info" Style="font-size: 60px;" />
+                            <MudText Typo="Typo.h6" Style="font-weight: bold;">@slot.DisplayName</MudText>
+                            <MudChip T="string" Color="@GetStatusColor(slot.Status)" Size="Size.Small" Text="@slot.Status.ToString()" />
+                            <MudStack Row="true" Spacing="1" Class="mt-2">
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Fingerprint" Size="Size.Small" Color="Color.Secondary" Variant="Variant.Outlined" Text="Fingerprint" />
+                                <MudChip T="string" Icon="@Icons.Material.Filled.Lock" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined" Text="Lock" />
+                            </MudStack>
+                        </MudStack>
+                    </MudCardContent>
+                    @if (slot.Status == SlotStatus.Available)
+                    {
+                        <MudCardActions Class="justify-center pb-4">
+                            <MudButton Variant="Variant.Filled" Color="Color.Success" StartIcon="@Icons.Material.Filled.PlayArrow">
+                                Start Charging
+                            </MudButton>
+                        </MudCardActions>
+                    }
+                </MudCard>
+            </MudItem>
+        }
+    </MudGrid>
+
+    <!-- Phone Slots (7-12) -->
     <MudText Typo="Typo.h5" Class="mb-3 mt-4" Style="font-weight: bold; color: #764ba2;">
         <MudIcon Icon="@Icons.Material.Filled.PhoneAndroid" /> Phone Slots (Secure with UV Sanitization)
     </MudText>
@@ -93,7 +128,7 @@
         }
     </MudGrid>
 
-    <!-- Laptop Slots (10-13) -->
+    <!-- Laptop Slots (13-16) -->
     <MudText Typo="Typo.h5" Class="mb-3 mt-4" Style="font-weight: bold; color: #f093fb;">
         <MudIcon Icon="@Icons.Material.Filled.Laptop" /> Laptop Slots (Secure)
     </MudText>

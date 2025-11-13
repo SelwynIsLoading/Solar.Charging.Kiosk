@@ -16,6 +16,7 @@ public class ChargingSlot
     public string DisplayName => Type switch
     {
         SlotType.Open => $"Open Slot {SlotNumber}",
+        SlotType.Secure => $"Secure Slot {SlotNumber}",
         SlotType.Phone => $"Phone Slot {SlotNumber}",
         SlotType.Laptop => $"Laptop Slot {SlotNumber}",
         _ => $"Slot {SlotNumber}"
@@ -24,6 +25,7 @@ public class ChargingSlot
     public string IconClass => Type switch
     {
         SlotType.Open => "bi bi-plug",
+        SlotType.Secure => "bi bi-shield-lock",
         SlotType.Phone => "bi bi-phone",
         SlotType.Laptop => "bi bi-laptop",
         _ => "bi bi-outlet"
