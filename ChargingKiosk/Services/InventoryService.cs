@@ -89,6 +89,7 @@ public class InventoryService : IInventoryService
         {
             { "Total", transactions.Sum(t => t.TotalAmount) },
             { "Open Slots", transactions.Where(t => t.SlotType == SlotType.Open).Sum(t => t.TotalAmount) },
+            { "Secure Slots", transactions.Where(t => t.SlotType == SlotType.Secure).Sum(t => t.TotalAmount) },
             { "Phone Slots", transactions.Where(t => t.SlotType == SlotType.Phone).Sum(t => t.TotalAmount) },
             { "Laptop Slots", transactions.Where(t => t.SlotType == SlotType.Laptop).Sum(t => t.TotalAmount) }
         };
@@ -103,6 +104,7 @@ public class InventoryService : IInventoryService
         {
             { "Total", transactions.Sum(t => t.TotalAmount) },
             { "Open Slots", transactions.Where(t => t.SlotType == SlotType.Open).Sum(t => t.TotalAmount) },
+            { "Secure Slots", transactions.Where(t => t.SlotType == SlotType.Secure).Sum(t => t.TotalAmount) },
             { "Phone Slots", transactions.Where(t => t.SlotType == SlotType.Phone).Sum(t => t.TotalAmount) },
             { "Laptop Slots", transactions.Where(t => t.SlotType == SlotType.Laptop).Sum(t => t.TotalAmount) }
         };
@@ -117,6 +119,7 @@ public class InventoryService : IInventoryService
         {
             { "Total", transactions.Sum(t => t.TotalAmount) },
             { "Open Slots", transactions.Where(t => t.SlotType == SlotType.Open).Sum(t => t.TotalAmount) },
+            { "Secure Slots", transactions.Where(t => t.SlotType == SlotType.Secure).Sum(t => t.TotalAmount) },
             { "Phone Slots", transactions.Where(t => t.SlotType == SlotType.Phone).Sum(t => t.TotalAmount) },
             { "Laptop Slots", transactions.Where(t => t.SlotType == SlotType.Laptop).Sum(t => t.TotalAmount) }
         };

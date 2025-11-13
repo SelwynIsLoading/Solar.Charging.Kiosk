@@ -5,6 +5,7 @@
 @inject NavigationManager Navigation
 @inject ISnackbar Snackbar
 @inject ILogger<SlotControl> Logger
+@inject IAdminSettingsService AdminSettings
 @implements IDisposable
 
 <PageTitle>Slot @SlotNumber - Solar Charging Station</PageTitle>
@@ -71,7 +72,9 @@
                             <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
                                 <MudIcon Icon="@Icons.Material.Filled.Info" />
                                 <MudText Typo="Typo.body2">
-                                    @(_isCoinListenerActive ? "Coin acceptor is active. Insert coins now..." : "Click below to activate coin acceptor")
+                                    @(_isCoinListenerActive
+                                        ? $"Coin acceptor is active. Auto-stop after {CoinListenerAutoStopSeconds} seconds of inactivity."
+                                        : "Click below to activate coin acceptor")
                                 </MudText>
                             </MudStack>
                         </MudAlert>
@@ -82,11 +85,21 @@
                                 <MudIcon Icon="@Icons.Material.Filled.PlayArrow" /> Activate Coin Acceptor
                             </MudButton>
                         }
-                        else
+                        else if (!AdminSettings.AutoActivateCoinAcceptor)
                         {
                             <MudButton Variant="Variant.Outlined" Color="Color.Error" OnClick="StopCoinListener" FullWidth="true" Class="mt-3" Style="background: rgba(255,255,255,0.1); color: white;">
                                 <MudIcon Icon="@Icons.Material.Filled.Stop" /> Stop Accepting Coins
                             </MudButton>
+                        }
+                        else
+                        {
+                            <MudChip T="string"
+                                     Color="Color.Info"
+                                     Variant="Variant.Filled"
+                                     Class="mt-3">
+                                <MudIcon Icon="@Icons.Material.Filled.Alarm" Class="me-2" />
+                                Auto-stop enabled (@CoinListenerAutoStopSeconds s idle timeout)
+                            </MudChip>
                         }
                         
                         @if (_denominations.Any())
@@ -96,9 +109,34 @@
                                 <strong>Rates:</strong> @string.Join(", ", _denominations.Select(d => $"₱{d.Value:0} = {d.ChargingMinutes}min"))
                             </MudText>
                         }
+
+                        @if (AdminSettings.EnableCoinSimulationButton)
+                        {
+                            <MudDivider Class="my-3" Style="background: rgba(255,255,255,0.3);" />
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Info"
+                                       StartIcon="@Icons.Material.Filled.PlayCircle"
+                                       OnClick="SimulateCoinInsert"
+                                       FullWidth="true"
+                                       Style="background: rgba(255,255,255,0.15); color: white;">
+                                Simulate ₱5 Coin
+                            </MudButton>
+                        }
                     </MudPaper>
 
-                    @if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+                    @if (AdminSettings.AllowCoinBypass)
+                    {
+                        <MudAlert Severity="Severity.Warning" Dense="true" Style="background: rgba(255,255,255,0.2); color: white;" Class="mb-3">
+                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+                                <MudIcon Icon="@Icons.Material.Filled.Emergency" />
+                                <MudText Typo="Typo.body2">
+                                    Coin bypass is active. Charging can start without inserting coins. Disable bypass in the Admin panel when finished testing.
+                                </MudText>
+                            </MudStack>
+                        </MudAlert>
+                    }
+
+                    @if (_slot.Type == SlotType.Secure || _slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
                     {
                         <!-- Fingerprint Enrollment -->
                         <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
@@ -257,7 +295,7 @@
                     }
 
                     <!-- Unlock/Stop Section -->
-                    @if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+                    @if (_slot.Type == SlotType.Secure || _slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
                     {
                         <!-- Access Device (Temporary Unlock) -->
                         <MudPaper Elevation="2" Class="pa-4" Style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white;">
@@ -408,6 +446,9 @@
     [Parameter]
     public int SlotNumber { get; set; }
 
+    private const int CoinListenerAutoStopSeconds = 20;
+    private readonly TimeSpan _coinListenerAutoStopTimeout = TimeSpan.FromSeconds(CoinListenerAutoStopSeconds);
+
     private ChargingSlot? _slot;
     private decimal _coinsInserted = 0;
     private int _allocatedMinutes = 0;
@@ -433,6 +474,7 @@
     private string _currentTime = DateTime.Now.ToString("hh:mm:ss tt");
     private int _sanitizationCountdown = 15;
     private List<CoinDenomination> _denominations = new();
+    private DateTime _lastCoinActivityUtc = DateTime.MinValue;
 
     protected override async Task OnInitializedAsync()
     {
@@ -452,6 +494,10 @@
                 _allocatedMinutes = _slot.ChargingMinutesAllocated;
                 StartTimer();
             }
+            else
+            {
+                AutoActivateCoinAcceptorIfNeeded();
+            }
         }
         catch (Exception ex)
         {
@@ -465,6 +511,7 @@
         
         _isCoinListenerActive = true;
         Snackbar.Add("Coin acceptor activated! Please insert coins...", Severity.Info);
+        _lastCoinActivityUtc = DateTime.UtcNow;
         
         // Poll coin slot API every 500ms for real-time detection
         _coinListenerTimer = new Timer(async _ =>
@@ -494,8 +541,22 @@
                         // Visual and audio feedback
                         Snackbar.Add($"💰 ₱{coinValue:0.00} inserted! +{minutesAdded} minutes", Severity.Success);
                         
+                        _lastCoinActivityUtc = DateTime.UtcNow;
+
                         StateHasChanged();
                     });
+                }
+
+                if (_isCoinListenerActive && !_isCharging)
+                {
+                    var idleDuration = DateTime.UtcNow - _lastCoinActivityUtc;
+                    if (idleDuration >= _coinListenerAutoStopTimeout)
+                    {
+                        await InvokeAsync(() =>
+                        {
+                            StopCoinListenerInternal(true);
+                        });
+                    }
                 }
             }
             catch (Exception ex)
@@ -507,15 +568,26 @@
     
     private void StopCoinListener()
     {
+        StopCoinListenerInternal(false);
+    }
+
+    private void StopCoinListenerInternal(bool autoStopped)
+    {
         if (!_isCoinListenerActive) return;
         
         _isCoinListenerActive = false;
         _coinListenerTimer?.Dispose();
         _coinListenerTimer = null;
+        _lastCoinActivityUtc = DateTime.MinValue;
         
         if (_coinsInserted > 0)
         {
             Snackbar.Add($"Total: ₱{_coinsInserted:0.00} = {_allocatedMinutes} minutes", Severity.Info);
+        }
+
+        if (autoStopped)
+        {
+            Snackbar.Add("Coin acceptor stopped automatically after inactivity.", Severity.Info);
         }
     }
     
@@ -533,6 +605,7 @@
         var minutesAdded = coinDenom?.ChargingMinutes ?? 0;
         
         Snackbar.Add($"💰 ₱{coinValue:0.00} inserted! +{minutesAdded} minutes", Severity.Success);
+        StateHasChanged();
     }
 
     private async Task EnrollFingerprint()
@@ -876,10 +949,17 @@
 
     private bool CanStartCharging()
     {
-        if (_slot == null || _coinsInserted <= 0)
+        if (_slot == null)
+        {
             return false;
+        }
 
-        if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+        if (_coinsInserted <= 0 && !AdminSettings.AllowCoinBypass)
+        {
+            return false;
+        }
+
+        if (_slot.Type == SlotType.Secure || _slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
         {
             return _fingerprintEnrolled;
         }
@@ -915,7 +995,7 @@
                         Snackbar.Add("Charging time expired. Stopping charging...", Severity.Warning);
                         
                         // For secured slots, force unlock without fingerprint on timeout
-                        if (_slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
+                        if (_slot.Type == SlotType.Secure || _slot.Type == SlotType.Phone || _slot.Type == SlotType.Laptop)
                         {
                             await StopChargingAfterVerification();
                         }
@@ -935,6 +1015,24 @@
     {
         _timer?.Dispose();
         _timer = null;
+    }
+
+    private void AutoActivateCoinAcceptorIfNeeded()
+    {
+        if (_slot == null)
+        {
+            return;
+        }
+
+        if (!AdminSettings.AutoActivateCoinAcceptor)
+        {
+            return;
+        }
+
+        if (_slot.Status == SlotStatus.Available && !_isCharging && !_isCoinListenerActive)
+        {
+            StartCoinListener();
+        }
     }
 
     private void StartSanitizationCountdown()
