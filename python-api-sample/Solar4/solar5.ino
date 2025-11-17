@@ -548,13 +548,19 @@ void handleFingerprintEnroll(JsonObject data) {
 void handleReadCoin() {
   StaticJsonDocument<100> doc;
   doc["success"] = true;
-  
-  // Return coin value if detected within last 2 seconds
+
+  // Need atomic snapshot because ISR updates coinDetectedTime
+  unsigned long detectionTimeSnapshot;
+  noInterrupts();
+  detectionTimeSnapshot = coinDetectedTime;
+  interrupts();
+
+  // Return coin value if detected within the configured window
   unsigned long currentTime = millis();
-  
-  if (coinValue > 0 && !coinProcessed && (currentTime - coinDetectedTime <= COIN_HOLD_WINDOW_MS)) {
+
+  if (coinValue > 0 && !coinProcessed && (currentTime - detectionTimeSnapshot <= COIN_HOLD_WINDOW_MS)) {
     doc["value"] = coinValue;
-    doc["timestamp"] = coinDetectedTime;
+    doc["timestamp"] = detectionTimeSnapshot;
     coinProcessed = true; // Mark as read to prevent duplicate
   } else {
     doc["value"] = 0.0;
@@ -565,9 +571,11 @@ void handleReadCoin() {
   Serial.println(response);
   
   // Clear coin value after the configured delay to be ready for the next coin
-  if (coinValue > 0 && (currentTime - coinDetectedTime > COIN_CLEAR_DELAY_MS)) {
+  if (coinValue > 0 && (currentTime - detectionTimeSnapshot > COIN_CLEAR_DELAY_MS)) {
     coinValue = 0.0;
+    noInterrupts();
     coinPulseCount = 0;
+    interrupts();
     coinProcessed = false;
   }
 }
@@ -587,12 +595,21 @@ void coinInterrupt() {
 
 void processCoinPulse() {
   unsigned long currentTime = millis();
-  
+
+  int pulsesSnapshot;
+  unsigned long detectionTimeSnapshot;
+
+  // Take atomic snapshot of ISR-managed values
+  noInterrupts();
+  pulsesSnapshot = coinPulseCount;
+  detectionTimeSnapshot = coinDetectedTime;
+  interrupts();
+
   // Only process if we have pulses AND enough time passed since last pulse
   // Wait 300ms after last pulse to ensure pulse train is complete
-  if (coinPulseCount > 0 && (currentTime - coinDetectedTime > 300)) {
+  if (pulsesSnapshot > 0 && (currentTime - detectionTimeSnapshot > 300)) {
     
-    int pulses = coinPulseCount;
+    int pulses = pulsesSnapshot;
     float detectedValue = 0.0;
     
     // Different pulse counts for different denominations
@@ -636,7 +653,9 @@ void processCoinPulse() {
     }
     
     // Reset counter
+    noInterrupts();
     coinPulseCount = 0;
+    interrupts();
   }
 }
 
