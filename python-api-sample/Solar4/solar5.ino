@@ -115,6 +115,7 @@ const int COIN_PIN = 2;
 // Coin detection timing windows (ms)
 const unsigned long COIN_HOLD_WINDOW_MS = 5000; // how long a detected coin stays readable
 const unsigned long COIN_CLEAR_DELAY_MS = 8000; // when to fully reset coin state
+const int COIN_PULSES_PER_PESO = 4;             // set to pulses emitted per peso (e.g., 4 => 5 pesos = 20 pulses)
 
 // ===== HARDWARE CONFIGURATION =====
 // Change these values based on your specific hardware setup
@@ -138,6 +139,38 @@ float coinValue = 0.0;
 unsigned long coinDetectedTime = 0;
 bool coinProcessed = false;
 unsigned long lastCoinPulseTime = 0;
+
+int normalizeCoinPulses(int rawPulses) {
+  if (rawPulses <= 0) {
+    return 0;
+  }
+  
+  if (COIN_PULSES_PER_PESO <= 1) {
+    return rawPulses;
+  }
+  
+  return (rawPulses + (COIN_PULSES_PER_PESO / 2)) / COIN_PULSES_PER_PESO;
+}
+
+float resolveCoinValueFromPulses(int normalizedPulses) {
+  if (normalizedPulses == 1) {
+    return 1.0;
+  }
+  
+  if (normalizedPulses >= 2 && normalizedPulses <= 6) {
+    return 5.0;
+  }
+  
+  if (normalizedPulses >= 7 && normalizedPulses <= 12) {
+    return 10.0;
+  }
+  
+  if (normalizedPulses >= 13 && normalizedPulses <= 22) {
+    return 20.0;
+  }
+  
+  return 0.0;
+}
 
 void setup() {
   Serial.begin(9600);
@@ -609,21 +642,8 @@ void processCoinPulse() {
   // Wait 300ms after last pulse to ensure pulse train is complete
   if (pulsesSnapshot > 0 && (currentTime - detectionTimeSnapshot > 300)) {
     
-    int pulses = pulsesSnapshot;
-    float detectedValue = 0.0;
-    
-    // Different pulse counts for different denominations
-    // Adjust based on your coin acceptor configuration
-    // Using ranges to handle slight variations in pulse counting
-    if (pulses == 1) {
-      detectedValue = 1.0;  // 1 Peso
-    } else if (pulses >= 2 && pulses <= 6) {
-      detectedValue = 5.0;  // 5 Pesos (typically 5 pulses)
-    } else if (pulses >= 7 && pulses <= 12) {
-      detectedValue = 10.0; // 10 Pesos (typically 10 pulses)
-    } else if (pulses >= 13 && pulses <= 22) {
-      detectedValue = 20.0; // 20 Pesos (typically 20 pulses)
-    }
+    int normalizedPulses = normalizeCoinPulses(pulsesSnapshot);
+    float detectedValue = resolveCoinValueFromPulses(normalizedPulses);
     
     if (detectedValue > 0) {
       coinValue = detectedValue;
@@ -631,7 +651,7 @@ void processCoinPulse() {
       // Send notification to serial with timestamp
       StaticJsonDocument<128> doc;
       doc["coinDetected"] = coinValue;
-      doc["pulses"] = pulses;
+      doc["pulses"] = pulsesSnapshot;
       doc["timestamp"] = currentTime;
       
       String response;
@@ -644,7 +664,7 @@ void processCoinPulse() {
       // Unknown pulse count - log for debugging
       StaticJsonDocument<128> doc;
       doc["warning"] = "Unknown pulse count";
-      doc["pulses"] = pulses;
+      doc["pulses"] = pulsesSnapshot;
       doc["timestamp"] = currentTime;
       
       String response;
