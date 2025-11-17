@@ -446,7 +446,7 @@
     [Parameter]
     public int SlotNumber { get; set; }
 
-    private const int CoinListenerAutoStopSeconds = 20;
+    private const int CoinListenerAutoStopSeconds = 120;
     private readonly TimeSpan _coinListenerAutoStopTimeout = TimeSpan.FromSeconds(CoinListenerAutoStopSeconds);
 
     private ChargingSlot? _slot;
