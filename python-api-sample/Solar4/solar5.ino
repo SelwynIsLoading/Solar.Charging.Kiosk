@@ -109,8 +109,12 @@ int getUvLightPin(int slot) {
   return UV_LIGHT_PINS[slot];
 }
 
-// Coin acceptor pin
-const int COIN_PIN = 4;
+// Coin acceptor pin (must support external interrupts on Arduino Mega: 2, 3, 18-21)
+const int COIN_PIN = 2;
+
+// Coin detection timing windows (ms)
+const unsigned long COIN_HOLD_WINDOW_MS = 5000; // how long a detected coin stays readable
+const unsigned long COIN_CLEAR_DELAY_MS = 8000; // when to fully reset coin state
 
 // ===== HARDWARE CONFIGURATION =====
 // Change these values based on your specific hardware setup
@@ -548,7 +552,7 @@ void handleReadCoin() {
   // Return coin value if detected within last 2 seconds
   unsigned long currentTime = millis();
   
-  if (coinValue > 0 && !coinProcessed && (currentTime - coinDetectedTime < 2000)) {
+  if (coinValue > 0 && !coinProcessed && (currentTime - coinDetectedTime <= COIN_HOLD_WINDOW_MS)) {
     doc["value"] = coinValue;
     doc["timestamp"] = coinDetectedTime;
     coinProcessed = true; // Mark as read to prevent duplicate
@@ -560,8 +564,8 @@ void handleReadCoin() {
   serializeJson(doc, response);
   Serial.println(response);
   
-  // Clear coin value after 3 seconds to be ready for next coin
-  if (coinValue > 0 && (currentTime - coinDetectedTime > 3000)) {
+  // Clear coin value after the configured delay to be ready for the next coin
+  if (coinValue > 0 && (currentTime - coinDetectedTime > COIN_CLEAR_DELAY_MS)) {
     coinValue = 0.0;
     coinPulseCount = 0;
     coinProcessed = false;
